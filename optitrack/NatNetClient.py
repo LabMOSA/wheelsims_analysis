@@ -20,8 +20,8 @@ import struct
 from threading import Thread
 import copy
 import time
-import DataDescriptions
-import MoCapData
+from . import DataDescriptions
+from . import MoCapData
 
 def trace( *args ):
     # uncomment the one you want to use

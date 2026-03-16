@@ -16,10 +16,10 @@
 # limitations under the License.
 
 """
-Module that receives a single streamed rigid body from Optitrack.
+Module that receives a multiple streamed rigid bodies from Optitrack.
 
-In the future, this module will be configurable and will return the position and
-orientation of multiple rigid bodies as Kinetics Toolkit Timeseries.
+This module return the position and orientation of multiple rigid bodies 
+as Kinetics Toolkit Timeseries.
 
 """
 
@@ -32,16 +32,16 @@ __license__ = "Apache 2.0"
 
 import sys
 import time
-from NatNetClient import NatNetClient
+from .NatNetClient import NatNetClient
 import kineticstoolkit.lab as ktk
 import numpy as np
 
 # Maximal number of frames to keep in memory
 frame_limit = 1000
 
-# Initialize empty lists to store positions and timestamps
-_positions = []  # Initialize empty lists to store positions
-_times = []  # and timestamps
+# Initialize empty lists to store positions, orientations and timestamps
+_data = {}
+ts = {}
 
 # Initial system time (to calculate time stamps relative to import time)
 _initial_system_time = time.time()
@@ -72,35 +72,47 @@ def receive_rigid_body_frame(
     """
     # Calculate elapsed time since the first frame
     relative_time = time.time() - _initial_system_time
-
-    # Add position and timestamp
-    _positions.append(np.append(position, 1.0))
-    _times.append(relative_time)
+    
+    if new_id not in _data:
+        _data[new_id] = {'_positions': [], '_orientations': [], '_times': []}
+    
+    # Add position, orientation and timestamp
+    _data[new_id]['_positions'].append(np.append(position, 1.0))
+    _data[new_id]['_orientations'].append(np.append(orientation, 1.0))
+    _data[new_id]['_times'].append(relative_time)
 
     # If frame count exceeds limit, remove oldest frames
-    if len(_positions) > frame_limit:
-        _positions.pop(0)
-        _times.pop(0)
+    if len(_data[new_id]['_positions']) > frame_limit:
+        _data[new_id]['_positions'].pop(0)
+        _data[new_id]['_orientations'].pop(0)
+        _data[new_id]['_times'].pop(0)
 
 
 def fetch() -> ktk.TimeSeries:
     """
-    Get a TimeSeries from the current position and time lists.
+    Get a TimeSeries from the current position, orientation and time lists.
 
     Returns
     -------
     ktk.TimeSeries
-        A time series object containing the position of the rigid bodies over
-        time.
+        A time series by object containing the position and the orientation 
+        in the 4x4 format matrix of the rigid bodies over time.
 
     """
-    # Convert lists of times and positions to numpy arrays
-    times_np = np.array(_times)
-    positions_np = np.array(_positions)
-
-    # Create the timeseries
-    ts = ktk.TimeSeries(data={"Position": positions_np}, time=times_np)
-
+       
+    for i in _data.keys():
+      
+      # Convert lists of times, positions and orientations to numpy arrays
+      times_np =np.array( _data[i]['_times'])
+      positions_np =np.array( _data[i]['_positions'])[:, 0:3]
+      orientations_np =np.array( _data[i]['_orientations'])[:, 0:4]
+      
+      # Create the homogeneous transformation matrix
+      transforms = ktk.geometry.create_transform_series(quaternions = orientations_np, positions = positions_np)
+      
+      # Create the timeseries
+      ts[i] = ktk.TimeSeries(data={"mat_4_4": transforms}, time=times_np) 
+    
     return ts
 
 
@@ -125,7 +137,7 @@ def start() -> None:
         sys.exit(1)
 
     # Wait for client to connect
-    while not _streaming_client.connected():
+    while not _streaming_client.connected(): 
         time.sleep(1)
 
     print(
@@ -155,5 +167,4 @@ def clear() -> None:
     None
 
     """
-    _positions.clear()
-    _times.clear()
+    _data.clear()

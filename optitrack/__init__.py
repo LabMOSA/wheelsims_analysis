@@ -18,15 +18,13 @@
 """
 Module that receives a multiple streamed rigid bodies from Optitrack.
 
-This module return the position and orientation of multiple rigid bodies 
+This module return the position and orientation of multiple rigid bodies
 as Kinetics Toolkit Timeseries.
 
 """
 
 __author__ = "Laboratoire de recherche en mobilité et systèmes adaptés"
-__copyright__ = (
-    "Copyright (C) 2024-2026 Laboratoire de recherche en mobilité et systèmes adaptés"
-)
+__copyright__ = "Copyright (C) 2024-2026 Laboratoire de recherche en mobilité et systèmes adaptés"
 __email__ = "chenier.felix@uqam.ca"
 __license__ = "Apache 2.0"
 
@@ -72,47 +70,56 @@ def receive_rigid_body_frame(
     """
     # Calculate elapsed time since the first frame
     relative_time = time.time() - _initial_system_time
-    
+
     if new_id not in _data:
-        _data[new_id] = {'_positions': [], '_orientations': [], '_times': []}
-    
+        _data[new_id] = {"_positions": [], "_orientations": [], "_times": []}
+
     # Add position, orientation and timestamp
-    _data[new_id]['_positions'].append(np.append(position, 1.0))
-    _data[new_id]['_orientations'].append(np.append(orientation, 1.0))
-    _data[new_id]['_times'].append(relative_time)
+    _data[new_id]["_positions"].append(np.append(position, 1.0))
+    _data[new_id]["_orientations"].append(np.append(orientation, 1.0))
+    _data[new_id]["_times"].append(relative_time)
 
     # If frame count exceeds limit, remove oldest frames
-    if len(_data[new_id]['_positions']) > frame_limit:
-        _data[new_id]['_positions'].pop(0)
-        _data[new_id]['_orientations'].pop(0)
-        _data[new_id]['_times'].pop(0)
+    if len(_data[new_id]["_positions"]) > frame_limit:
+        _data[new_id]["_positions"].pop(0)
+        _data[new_id]["_orientations"].pop(0)
+        _data[new_id]["_times"].pop(0)
 
 
 def fetch() -> ktk.TimeSeries:
     """
-    Get a TimeSeries from the current position, orientation and time lists.
+    Get the trajectory of all received rigid bodies as TimeSeries of transforms.
+
+    Returns a dictionary of TimeSeries where each key is the ID of the rigid
+    body in Motive, and the TimeSeries contains one transform series. The max
+    length of these TimeSeries can be changed by changing the frame_limit
+    property of this module.
+
+    A dictionary of TimeSeries is returned instead of one TimeSeries because
+    each data is received at a different time value. TimeSeries can then be
+    merged to a single time vector using the TimeSeries.merge() method.
 
     Returns
     -------
-    ktk.TimeSeries
-        A time series by object containing the position and the orientation 
-        in the 4x4 format matrix of the rigid bodies over time.
+    dict[str, ktk.TimeSeries]
 
     """
-       
-    for i in _data.keys():
-      
-      # Convert lists of times, positions and orientations to numpy arrays
-      times_np =np.array( _data[i]['_times'])
-      positions_np =np.array( _data[i]['_positions'])[:, 0:3]
-      orientations_np =np.array( _data[i]['_orientations'])[:, 0:4]
-      
-      # Create the homogeneous transformation matrix
-      transforms = ktk.geometry.create_transform_series(quaternions = orientations_np, positions = positions_np)
-      
-      # Create the timeseries
-      ts[i] = ktk.TimeSeries(data={"mat_4_4": transforms}, time=times_np) 
-    
+
+    for key in _data.keys():
+
+        # Convert lists of times, positions and orientations to numpy arrays
+        times_np = np.array(_data[key]["_times"])
+        positions_np = np.array(_data[key]["_positions"])[:, 0:3]
+        orientations_np = np.array(_data[key]["_orientations"])[:, 0:4]
+
+        # Create the homogeneous transformation matrix
+        transforms = ktk.geometry.create_transform_series(
+            quaternions=orientations_np, positions=positions_np
+        )
+
+        # Create the timeseries
+        ts[str(key)] = ktk.TimeSeries(data={str(key): transforms}, time=times_np)
+
     return ts
 
 
@@ -137,7 +144,7 @@ def start() -> None:
         sys.exit(1)
 
     # Wait for client to connect
-    while not _streaming_client.connected(): 
+    while not _streaming_client.connected():
         time.sleep(1)
 
     print(
@@ -160,7 +167,7 @@ def stop() -> None:
 
 def clear() -> None:
     """
-    Clear positions and times lists.
+    Clear buffer.
 
     Returns
     -------

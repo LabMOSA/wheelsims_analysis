@@ -74,6 +74,11 @@ def receive_rigid_body_frame(
     if new_id not in _data:
         _data[new_id] = {"_positions": [], "_orientations": [], "_times": []}
 
+    if len(_data[new_id]["_times"]) > 0:
+        last_time = _data[new_id]["_times"][-1]
+        if relative_time <= last_time:
+            relative_time = last_time + 1e-6
+
     # Add position, orientation and timestamp
     _data[new_id]["_positions"].append(np.append(position, 1.0))
     _data[new_id]["_orientations"].append(np.append(orientation, 1.0))
@@ -107,10 +112,18 @@ def fetch() -> ktk.TimeSeries:
 
     for key in _data.keys():
 
+        n_samples = min(
+            len(_data[key]["_times"]),
+            len(_data[key]["_positions"]),
+            len(_data[key]["_orientations"]),
+        )
+
         # Convert lists of times, positions and orientations to numpy arrays
-        times_np = np.array(_data[key]["_times"])
-        positions_np = np.array(_data[key]["_positions"])[:, 0:3]
-        orientations_np = np.array(_data[key]["_orientations"])[:, 0:4]
+        times_np = np.array(_data[key]["_times"][:n_samples])
+        positions_np = np.array(_data[key]["_positions"][:n_samples])[:, 0:3]
+        orientations_np = np.array(_data[key]["_orientations"][:n_samples])[
+            :, 0:4
+        ]
 
         # Create the homogeneous transformation matrix
         transforms = ktk.geometry.create_transform_series(
@@ -118,7 +131,9 @@ def fetch() -> ktk.TimeSeries:
         )
 
         # Create the timeseries
-        ts[str(key)] = ktk.TimeSeries(data={str(key): transforms}, time=times_np)
+        ts[str(key)] = ktk.TimeSeries(
+            data={str(key): transforms}, time=times_np
+        )
 
     return ts
 

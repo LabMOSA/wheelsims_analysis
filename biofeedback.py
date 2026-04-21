@@ -1,82 +1,223 @@
-import optitrack as ot
-import matplotlib.pyplot as plt
-import kineticstoolkit.lab as ktk
-import socket
-import json
-import time
+def push_frequency(data, arg):
 
-ot.start()
+    import kineticstoolkit as ktk
+    import numpy as np
+    import matplotlib.pyplot as plt
 
-n=1
-last_clear = -1
+    coordinates_left_wheel_center = np.array(
+        [arg["coordinates_left_wheel_center"] + [1.0]]
+    )
+    coordinates_right_wheel_center = np.array(
+        [arg["coordinates_right_wheel_center"] + [1.0]]
+    )
 
-def plot_pattern_1(key):
-        
-        global points
-        global events
-        
-        # Plot 1
-        plt.figure()
-        times = ts[key].time
-        pos = ts[key].data [key][:, 0:3, 3]
-        
-        t = ts[key].time
-        x = ts[key].data [key][:, 0, 3]
-        y = ts[key].data [key][:, 1, 3]
-        z = ts[key].data [key][:, 2, 3]
+    coordinates_left_hand = np.array([arg["coordinates_left_hand"] + [1.0]])
+    coordinates_right_hand = np.array([arg["coordinates_right_hand"] + [1.0]])
 
-        plt.plot(t, x, label='x')
-        plt.plot(t, y, label='y')
-        plt.plot(t, z, label='z')
-        
-        plt.legend()
-        
-        plt.title("ID rigidbody : " + str(key))
-        
-        points = plt.ginput(6)
-        
-        events = []
-        for point in points:
-               # events.append(float(point[0]))
-               ts[key] = ts[key].add_event(float(point[0]), "X")
-    
-        for i in range(5):
-            
-            ts_crop = ts.copy()
-            ts_crop[key] = ts_crop[key].get_ts_between_times(float(points[i][0]), float(points[i+1][0]))
-        
-            # Plot 2
-            plt.figure()
-            times = ts_crop[key].time
-            pos = ts_crop[key].data[key][:, 0:3, 3]
-            
-            t = ts_crop[key].time
-            x = ts_crop[key].data[key][:, 0, 3]
-            y = ts_crop[key].data[key][:, 1, 3]
-            z = ts_crop[key].data[key][:, 2, 3]
-    
-            plt.plot(x, y)
-            
-            plt.legend()
-            
-            plt.title("ID rigidbody : " + str(key))
-            
+    data_side = [
+        {
+            "id_streaming": "201",
+            "local_meta2": coordinates_left_hand,
+            "side": "L",
+            "wheel_center": coordinates_left_wheel_center,
+        },
+        {
+            "id_streaming": "202",
+            "local_meta2": coordinates_right_hand,
+            "side": "R",
+            "wheel_center": coordinates_right_wheel_center,
+        },
+    ]
 
+    n = 1
 
-try:
-    while True:
-        ts = ot.fetch()
-        
-        if 1 in ts:
-            n = len(ts[1].time) 
-            print(n)
-        else:
-            continue
+    id_streaming = data_side[n]["id_streaming"]
+    side = data_side[n]["side"]
 
-finally:
-    
-    ot.stop()
+    ts = ktk.TimeSeries()
+    ts.time = data[id_streaming].time
 
-    ktk.save("ts_all_.ktk.zip", ts)
-            
+    ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
+        data[id_streaming].data[id_streaming], data_side[n]["local_meta2"]
+    )
 
+    t_min = max(ts.time[0], data["102"].time[0])
+    t_max = min(ts.time[-1], data["102"].time[-1])
+
+    ts_data = data["102"].get_ts_between_times(t_min, t_max)
+    ts = ts.get_ts_between_times(t_min, t_max)
+
+    ts = ts.resample(ts_data.time)
+
+    ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(
+        global_coordinates=ts.data[f"Meta2{side}"],
+        reference_frames=ts_data.data["102"],
+    )
+    ts.data[f"Meta2{side}"] = ts.data[f"Meta2{side}"][:, 0]
+
+    # # Set sample rate constant
+    dt = np.median(np.diff(ts.time))
+    time_uniform = np.arange(ts.time[0], ts.time[-1], dt)
+    ts = ts.resample(time_uniform)
+
+    # Filter butterworth order 4 with cut frequency of 6Hz
+    ts = ktk.filters.butter(ts, fc=6, order=4)
+
+    # Add velocity and acceleration timeseries
+    ts_df = ktk.filters.deriv(ts, n=1)
+    ts_dff = ktk.filters.deriv(ts, n=2)
+
+    ts = ts.get_ts_before_index(len(ts.time) - 1)
+    ts.data[f"Meta2{side}_df"] = ts_df.data[f"Meta2{side}"]
+    ts = ts.get_ts_before_index(len(ts.time) - 1)
+    ts.data[f"Meta2{side}_dff"] = ts_dff.data[f"Meta2{side}"]
+
+    # Cycles detection
+    ts_events = ktk.cycles.detect_cycles(
+        ts_df,
+        f"Meta2{side}",
+        thresholds=(0.0, 0.0),
+        event_names=["push", "recovery"],
+    )
+
+    events = [e for e in ts_events.events if e.name != "_"]
+
+    cycles = []
+    for i in range(len(events) - 2):
+        if (
+            events[i].name == "push"
+            and events[i + 1].name == "recovery"
+            and events[i + 2].name == "push"
+        ):
+
+            delta_t = events[i + 2].time - events[i].time
+
+            index_t = ts.get_index_at_time(events[i].time)
+            index_t1 = ts.get_index_at_time(events[i + 1].time)
+            index_t2 = ts.get_index_at_time(events[i + 2].time)
+
+            delta_x = (
+                ts.data[f"Meta2{side}"][index_t1]
+                - ts.data[f"Meta2{side}"][index_t]
+            )
+            delta_x_ = (
+                ts.data[f"Meta2{side}"][index_t2]
+                - ts.data[f"Meta2{side}"][index_t1]
+            )
+
+            if delta_t < 4.2 and delta_t > 0.4:  # seuil delta t
+                if delta_x > 0.2 and delta_x_ < -0.1:  # seuil delta_x
+                    cycles.append(
+                        {
+                            "in_push": events[i].time,
+                            "recovery": events[i + 1].time,
+                            "end_push": events[i + 2].time,
+                            "push_frequency": 1
+                            / (events[i + 2].time - events[i].time),
+                        }
+                    )
+
+    for cycle in cycles:
+
+        ts = ts.add_event(cycle["in_push"], "in_push")
+        # ts = ts.add_event(cycle["recovery"], "recovery")
+        ts = ts.add_event(cycle["end_push"], "end_push")
+
+    # Timeseries for pattern Meta2L
+    _ts = ktk.TimeSeries()
+    _ts.time = data[id_streaming].time
+    _ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
+        data[id_streaming].data[id_streaming], data_side[n]["local_meta2"]
+    )
+
+    t_min = max(_ts.time[0], data["102"].time[0])
+    t_max = min(_ts.time[-1], data["102"].time[-1])
+
+    ts_data = data["102"].get_ts_between_times(t_min, t_max)
+    _ts = _ts.get_ts_between_times(t_min, t_max)
+
+    _ts = _ts.resample(ts_data.time)
+
+    _ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(
+        global_coordinates=_ts.data[f"Meta2{side}"],
+        reference_frames=ts_data.data["102"],
+    )
+    _ts.data[f"Meta2{side}"] = _ts.data[f"Meta2{side}"][:, 0:2]
+
+    dt = np.median(np.diff(_ts.time))
+    time_uniform = np.arange(_ts.time[0], _ts.time[-1], dt)
+    _ts = _ts.resample(time_uniform)
+
+    # # Plot Position and velocity
+    plt.figure()
+    plt.subplot(5, 1, 1)
+    plt.title("Position")
+    colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
+    color = colors[i % 2]
+
+    for i, cycle in enumerate(cycles):
+        start = cycle["in_push"]
+        end = cycle["end_push"]
+        color = colors[i % 2]
+
+        plt.axvspan(start, end, color=color, alpha=0.3)
+    ts.plot(f"Meta2{side}")
+
+    plt.subplot(5, 1, 3)
+    plt.title("Velocity")
+    ts.plot(f"Meta2{side}_df")
+    plt.subplot(5, 1, 5)
+    plt.title("Acceleration")
+    ts.plot(f"Meta2{side}_dff")
+
+    # Plot combined normalised cycles
+    plt.figure()
+    ts_normalised = ktk.cycles.time_normalize(ts, "in_push", "end_push")
+    data_ = ktk.cycles.stack(ts_normalised)
+    data_
+    n_cycles = data_[f"Meta2{side}"].shape[0]
+    for i_cycle in range(n_cycles):
+        plt.plot(data_[f"Meta2{side}"][i_cycle], label=f"Cycle {i_cycle}")
+    plt.legend()
+
+    # Plot single pattern push
+    n_ = 1
+    plt.figure()
+
+    for cycle in cycles:
+        ax = plt.subplot(7, 7, n_)
+
+        circle = plt.Circle(
+            (
+                coordinates_right_wheel_center[0][0],
+                coordinates_right_wheel_center[0][1],
+            ),
+            0.54 / 2,
+            fill=False,
+            linestyle="--",
+        )
+        ax.add_patch(circle)
+
+        _ts_ = _ts.get_ts_between_times(cycle["in_push"], cycle["end_push"])
+        ax.plot(
+            _ts_.data[f"Meta2{side}"][:, 0], _ts_.data[f"Meta2{side}"][:, 1]
+        )
+
+        ax.set_xlim(-0.8, 0.2)
+        ax.set_ylim(0, 1.15)
+
+        # ax.set_xlim(-0.8, 0)
+        # ax.set_ylim(0, 0.7)
+        ax.set_aspect("equal")
+
+        n_ += 1
+    plt.show()
+
+    # list push frequency and mean
+    push_frequency = []
+    for i in range(len(cycles)):
+        push_frequency.append(cycles[i]["push_frequency"])
+        # print(str(i), " ", str(cycles[i]["push_frequency"]))
+    mean_push_frequency = np.mean(push_frequency)
+
+    return mean_push_frequency

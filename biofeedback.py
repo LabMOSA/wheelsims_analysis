@@ -83,45 +83,99 @@ def push_frequency(data, arg):
     events = [e for e in ts_events.events if e.name != "_"]
 
     cycles = []
+    
+    # Creation des cycles lorsque la direction change --> v = 0 avec critere temporel : durée cycle supérieur à 0.4 s
     for i in range(len(events) - 2):
-        if (
-            events[i].name == "push"
-            and events[i + 1].name == "recovery"
-            and events[i + 2].name == "push"
-        ):
-
-            delta_t = events[i + 2].time - events[i].time
-
+        if (events[i].name == "push" and events[i+1].name == "recovery" and events[i+2].name == "push"):
+    
             index_t = ts.get_index_at_time(events[i].time)
-            index_t1 = ts.get_index_at_time(events[i + 1].time)
-            index_t2 = ts.get_index_at_time(events[i + 2].time)
-
-            delta_x = (
-                ts.data[f"Meta2{side}"][index_t1]
-                - ts.data[f"Meta2{side}"][index_t]
-            )
-            delta_x_ = (
-                ts.data[f"Meta2{side}"][index_t2]
-                - ts.data[f"Meta2{side}"][index_t1]
-            )
-
-            if delta_t < 4.2 and delta_t > 0.4:  # seuil delta t
-                if delta_x > 0.2 and delta_x_ < -0.1:  # seuil delta_x
-                    cycles.append(
-                        {
-                            "in_push": events[i].time,
-                            "recovery": events[i + 1].time,
-                            "end_push": events[i + 2].time,
-                            "push_frequency": 1
-                            / (events[i + 2].time - events[i].time),
-                        }
-                    )
-
+            index_t1 = ts.get_index_at_time(events[i+1].time)
+            index_t2 = ts.get_index_at_time(events[i+2].time)        
+            
+            delta_t = events[i+2].time - events[i].time
+            
+            index_t = ts.get_index_at_time(events[i].time)
+            index_t1 = ts.get_index_at_time(events[i+1].time)
+            index_t2 = ts.get_index_at_time(events[i+2].time)
+            
+            delta_x = ts.data[f"Meta2{side}"][index_t1] - ts.data[f"Meta2{side}"][index_t]
+            delta_x_ = ts.data[f"Meta2{side}"][index_t2] - ts.data[f"Meta2{side}"][index_t1]
+            
+            if delta_t > 0.4: # seuil delta t
+                cycles.append({
+                    "in_push": {"time": events[i].time, "value": ts.data[f"Meta2{side}"][index_t]},
+                    "recovery": {"time": events[i+1].time, "value": ts.data[f"Meta2{side}"][index_t1]},
+                    "end_push": {"time": events[i+2].time, "value": ts.data[f"Meta2{side}"][index_t2]},
+                    "range": ts.data[f"Meta2{side}"][index_t1] - ts.data[f"Meta2{side}"][index_t],
+                })
+    
+    
+    # Critère cinématique n°1 : amplitude minimale fonction de l'amplitude générale (médiane) des 3 derniers cycles
+    filtered = []
+    
     for cycle in cycles:
-
-        ts = ts.add_event(cycle["in_push"], "in_push")
+        if len(filtered) < 3:
+            filtered.append(cycle)
+            continue
+    
+        prev_ranges = np.array([
+                filtered[-1]["range"],
+                filtered[-2]["range"],
+                filtered[-3]["range"]
+                ])
+    
+        if cycle["range"] >= 0.3 * np.median(prev_ranges):
+            filtered.append(cycle)
+    
+    cycles = filtered
+    
+    
+    # Critère cinématique n°2 : condition de traverser le point milieu entre la position la plus antérieure et la plus postérieure générale des 3 derniers cycles
+    filtered = []
+    
+    signal = ts.data[f"Meta2{side}"]
+    
+    for r in range(len(cycles)):
+        if r < 3:
+            filtered.append(cycles[r])
+            continue
+    
+        prev_values = [
+            (cycles[r-1]["recovery"]["value"] + cycles[r-1]["in_push"]["value"])/2,
+            (cycles[r-2]["recovery"]["value"] + cycles[r-2]["in_push"]["value"])/2,
+            (cycles[r-3]["recovery"]["value"] + cycles[r-3]["in_push"]["value"])/2
+        ]
+    
+        median_val = sorted(prev_values)[1]
+    
+        t0 = ts.get_index_at_time(cycles[r]["in_push"]["time"])
+        t2 = ts.get_index_at_time(cycles[r]["end_push"]["time"])
+    
+        segment = signal[t0:t2+1]
+    
+        crossed_up = False
+        crossed_down = False
+    
+        for i in range(len(segment) - 1):
+            if segment[i] < median_val and segment[i+1] >= median_val:
+                crossed_up = True
+            if segment[i] > median_val and segment[i+1] <= median_val:
+                crossed_down = True
+    
+            if crossed_up and crossed_down:
+                break
+    
+        if crossed_up and crossed_down:
+            filtered.append(cycles[r])
+    
+    cycles = filtered
+    
+    
+    for cycle in cycles:
+        
+        ts = ts.add_event(cycle["in_push"]["time"], "in_push")
         # ts = ts.add_event(cycle["recovery"], "recovery")
-        ts = ts.add_event(cycle["end_push"], "end_push")
+        ts = ts.add_event(cycle["end_push"]["time"], "end_push")
 
     # Timeseries for pattern Meta2L
     _ts = ktk.TimeSeries()
@@ -156,8 +210,8 @@ def push_frequency(data, arg):
     color = colors[i % 2]
 
     for i, cycle in enumerate(cycles):
-        start = cycle["in_push"]
-        end = cycle["end_push"]
+        start = cycle["in_push"]["time"]
+        end = cycle["end_push"]["time"]
         color = colors[i % 2]
 
         plt.axvspan(start, end, color=color, alpha=0.3)
@@ -198,7 +252,7 @@ def push_frequency(data, arg):
         )
         ax.add_patch(circle)
 
-        _ts_ = _ts.get_ts_between_times(cycle["in_push"], cycle["end_push"])
+        _ts_ = _ts.get_ts_between_times(cycle["in_push"]["time"], cycle["end_push"]["time"])
         ax.plot(
             _ts_.data[f"Meta2{side}"][:, 0], _ts_.data[f"Meta2{side}"][:, 1]
         )

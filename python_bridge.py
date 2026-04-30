@@ -27,10 +27,10 @@ def start_optitrack():
 
 
 # basics functions
-def push_frequency(arg):
+def biofeedback_godot(arg):
     global ts
-    mean_push_frequency = biofeedback.push_frequency(ts, arg)
-    _send_data({"type": "response", "data": str(mean_push_frequency)})
+    data_biofeedback = biofeedback.biofeedback_godot(ts, arg)
+    _send_data({"type": "response", "data": str(data_biofeedback)})
 
 
 def clear_data_optitrack():
@@ -48,7 +48,7 @@ def close():
 # functions to call anything command : Godot to Python
 command = {
     "clear_data_optitrack": clear_data_optitrack,
-    "push_frequency": push_frequency,
+    "biofeedback_godot": biofeedback_godot,
     "close": close,
 }
 

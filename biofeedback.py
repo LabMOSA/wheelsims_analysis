@@ -206,11 +206,11 @@ def biofeedback(data, arg):
 
         return cycles
 
-    def caculate_mean_push_frequency(cycles):
+    def caculate_mean_three_last_push_frequency(cycles):
         # list push frequency and mean
         push_frequency = []
-        for i in range(len(cycles)):
-            push_frequency.append(cycles[i]["push_frequency"])
+        for i in range(3):
+            push_frequency.append(cycles[-i-1]["push_frequency"])
             # print(str(i), " ", str(cycles[i]["push_frequency"]))
         mean_push_frequency = np.mean(push_frequency)
 
@@ -227,8 +227,8 @@ def biofeedback(data, arg):
         data_cycles[side]["ts"] = ts
         data_cycles[side]["cycles"] = cycles
         
-        mean_push_frequency = caculate_mean_push_frequency(cycles)
-        data_biofeedback[side]["mean_push_frequency"] = mean_push_frequency
+        mean_push_frequency = caculate_mean_three_last_push_frequency(cycles)
+        data_biofeedback[side]["mean_push_frequency"] = float(mean_push_frequency)
     
         data_biofeedback[side]["cycle_count"] = len(cycles)
 
@@ -360,14 +360,14 @@ def biofeedback_godot(data, arg):
     data_biofeedback, data_cycles = biofeedback(data, arg)
     
     
-    plt.close()
+    # plt.close()
     
-    plot_sides_kinematics(data_cycles)
+    # plot_sides_kinematics(data_cycles)
     
-    plot_side_kinematics(data_cycles, "left")
-    plot_side_kinematics(data_cycles, "right")
+    # plot_side_kinematics(data_cycles, "left")
+    # plot_side_kinematics(data_cycles, "right")
     
-    plot_side_push_pattern(arg, data_cycles, "left")
-    plot_side_push_pattern(arg, data_cycles, "right")
+    # plot_side_push_pattern(arg, data_cycles, "left")
+    # plot_side_push_pattern(arg, data_cycles, "right")
     
     return data_biofeedback

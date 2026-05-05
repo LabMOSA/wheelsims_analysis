@@ -30,7 +30,7 @@ def start_optitrack():
 def biofeedback_godot(arg):
     global ts
     data_biofeedback = biofeedback.biofeedback_godot(ts, arg)
-    _send_data({"type": "response", "data": str(data_biofeedback)})
+    _send_data({"type": "response", "data": data_biofeedback})
 
 
 def clear_data_optitrack():

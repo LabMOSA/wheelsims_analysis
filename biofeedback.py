@@ -31,11 +31,19 @@ def biofeedback(data, arg):
 
     def initialize_data():
 
-        coordinates_left_wheel_center = np.array([arg["coordinates_left_wheel_center"] + [1.0]])
-        coordinates_right_wheel_center = np.array([arg["coordinates_right_wheel_center"] + [1.0]])
+        coordinates_left_wheel_center = np.array(
+            [arg["coordinates_left_wheel_center"] + [1.0]]
+        )
+        coordinates_right_wheel_center = np.array(
+            [arg["coordinates_right_wheel_center"] + [1.0]]
+        )
 
-        coordinates_left_hand = np.array([arg["coordinates_left_hand"] + [1.0]])
-        coordinates_right_hand = np.array([arg["coordinates_right_hand"] + [1.0]])
+        coordinates_left_hand = np.array(
+            [arg["coordinates_left_hand"] + [1.0]]
+        )
+        coordinates_right_hand = np.array(
+            [arg["coordinates_right_hand"] + [1.0]]
+        )
 
         data_side = [
             {
@@ -62,7 +70,9 @@ def biofeedback(data, arg):
         ts = ktk.TimeSeries()
         ts.time = data[id_streaming].time
 
-        ts.data[f"Meta2{side}"] = ktk.geometry.matmul(data[id_streaming].data[id_streaming], data_side[n]["local_meta2"])
+        ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
+            data[id_streaming].data[id_streaming], data_side[n]["local_meta2"]
+        )
 
         t_min = max(ts.time[0], data["102"].time[0])
         t_max = min(ts.time[-1], data["102"].time[-1])
@@ -72,7 +82,10 @@ def biofeedback(data, arg):
 
         ts = ts.resample(ts_data.time)
 
-        ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(global_coordinates=ts.data[f"Meta2{side}"], reference_frames=ts_data.data["102"])
+        ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(
+            global_coordinates=ts.data[f"Meta2{side}"],
+            reference_frames=ts_data.data["102"],
+        )
 
         # Set sample rate constant
         dt = np.median(np.diff(ts.time))
@@ -81,8 +94,7 @@ def biofeedback(data, arg):
 
         # Filter butterworth order 4 with cut frequency of 6Hz
         ts = ktk.filters.butter(ts, fc=6, order=4)
-        
-        
+
         # Add velocity and acceleration timeseries
         ts_df = ktk.filters.deriv(ts, n=1)
         ts_dff = ktk.filters.deriv(ts, n=2)
@@ -97,9 +109,15 @@ def biofeedback(data, arg):
     def detect_push_cycles(ts, side):
 
         pos_x = ts.data[f"Meta2{side}"][:, 0]
+        vel_x = ts.data[f"Meta2{side}_df"]
 
-        # Creation des cycles lorsque la direction change --> v = 0 avec critere temporel : durée cycle supérieur à 0.4 s        
-        ts_events = ktk.cycles.detect_cycles(ts, f"Meta2{side}_df", thresholds=(0.0, 0.0), event_names=["push", "recovery"])        
+        # Creation des cycles lorsque la direction change --> v = 0 avec critere temporel : durée cycle supérieur à 0.4 s
+        ts_events = ktk.cycles.detect_cycles(
+            ts,
+            f"Meta2{side}_df",
+            thresholds=(0.0, 0.0),
+            event_names=["push", "recovery"],
+        )
         events = [e for e in ts_events.events if e.name != "_"]
 
         cycles = []
@@ -121,59 +139,73 @@ def biofeedback(data, arg):
                     cycles.append(
                         {
                             "in_push": {
-                            "time": events[i].time,
-                            "value": pos_x[index_t],
+                                "time": events[i].time,
+                                "value": pos_x[index_t],
                             },
                             "recovery": {
-                            "time": events[i + 1].time,
-                            "value": pos_x[index_t1],
+                                "time": events[i + 1].time,
+                                "value": pos_x[index_t1],
                             },
                             "end_push": {
-                            "time": events[i + 2].time,
-                            "value": pos_x[index_t2],
+                                "time": events[i + 2].time,
+                                "value": pos_x[index_t2],
                             },
                             "range": pos_x[index_t1] - pos_x[index_t],
+                            "velocity_max": np.nanmax(vel_x[index_t:index_t2]),
                             "push_frequency": 1 / delta_t,
                         }
                     )
 
         # Critère cinématique n°1 : amplitude minimale fonction de l'amplitude générale (médiane) des 3 derniers cycles
-        filtered = []
+        filtered_1 = []
 
         for cycle in cycles:
-            if len(filtered) < 3:
-                filtered.append(cycle)
+            if len(filtered_1) < 4:
+                if cycle["velocity_max"] > 0.2:
+                    filtered_1.append(cycle)
                 continue
 
             prev_ranges = np.array(
                 [
-                    filtered[-1]["range"],
-                    filtered[-2]["range"],
-                    filtered[-3]["range"],
+                    filtered_1[-1]["range"],
+                    filtered_1[-2]["range"],
+                    filtered_1[-3]["range"],
                 ]
             )
 
-            if cycle["range"] >= 0.3 * np.median(prev_ranges):
-                filtered.append(cycle)
+            if (
+                cycle["range"] >= 0.3 * np.median(prev_ranges)
+                and cycle["velocity_max"] > 0.2
+            ):
+                filtered_1.append(cycle)
 
-        cycles = filtered
+        cycles = filtered_1
 
         # Critère cinématique n°2 : condition de traverser le point milieu entre la position la plus antérieure et la plus postérieure générale des 3 derniers cycles
-        filtered = []
+        filtered_2 = []
         signal = pos_x
 
         for r in range(len(cycles)):
             if r < 3:
-                filtered.append(cycles[r])
+                filtered_2.append(cycles[r])
                 continue
 
             prev_values = [
-                (cycles[r - 1]["recovery"]["value"]
-                 + cycles[r - 1]["in_push"]["value"]) / 2,
-                (cycles[r - 2]["recovery"]["value"]
-                 + cycles[r - 2]["in_push"]["value"]) / 2,
-                (cycles[r - 3]["recovery"]["value"]
-                 + cycles[r - 3]["in_push"]["value"]) / 2,
+                (
+                    cycles[r - 1]["recovery"]["value"]
+                    + cycles[r - 1]["in_push"]["value"]
+                )
+                / 2,
+                (
+                    cycles[r - 2]["recovery"]["value"]
+                    + cycles[r - 2]["in_push"]["value"]
+                )
+                / 2,
+                (
+                    cycles[r - 3]["recovery"]["value"]
+                    + cycles[r - 3]["in_push"]["value"]
+                )
+                / 2,
             ]
 
             median_val = sorted(prev_values)[1]
@@ -196,27 +228,29 @@ def biofeedback(data, arg):
                     break
 
             if crossed_up and crossed_down:
-                filtered.append(cycles[r])
-
-        cycles = filtered
+                filtered_2.append(cycles[r])
 
         for cycle in cycles:
             ts = ts.add_event(cycle["in_push"]["time"], "in_push")
             ts = ts.add_event(cycle["end_push"]["time"], "end_push")
 
-        return cycles
+        return filtered_2
 
     def caculate_mean_three_last_push_frequency(cycles):
         # list push frequency and mean
-        push_frequency = []
-        for i in range(3):
-            push_frequency.append(cycles[-i-1]["push_frequency"])
-            # print(str(i), " ", str(cycles[i]["push_frequency"]))
-        mean_push_frequency = np.mean(push_frequency)
+        try:
+            push_frequency = []
+            for i in range(3):
+                push_frequency.append(cycles[-i - 1]["push_frequency"])
+            mean_push_frequency = np.median(push_frequency)
+
+        except:
+            try:
+                cycles[-1]["push_frequency"]
+            except:
+                mean_push_frequency = 0
 
         return mean_push_frequency
-
-
 
     data_side = initialize_data()
 
@@ -226,18 +260,19 @@ def biofeedback(data, arg):
 
         data_cycles[side]["ts"] = ts
         data_cycles[side]["cycles"] = cycles
-        
+
         mean_push_frequency = caculate_mean_three_last_push_frequency(cycles)
-        data_biofeedback[side]["mean_push_frequency"] = float(mean_push_frequency)
-    
+        data_biofeedback[side]["mean_push_frequency"] = float(
+            mean_push_frequency
+        )
+
         data_biofeedback[side]["cycle_count"] = len(cycles)
 
     return data_biofeedback, data_cycles
 
 
-
 def plot_sides_kinematics(data_cycles):
-    
+
     # Plot Position and velocity
     plt.figure()
     plt.suptitle("Bilateral kinematics")
@@ -247,7 +282,7 @@ def plot_sides_kinematics(data_cycles):
             plt.subplot(2, 1, 1)
         else:
             plt.subplot(2, 1, 2)
-            
+
         plt.title("Position")
         colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
 
@@ -255,33 +290,41 @@ def plot_sides_kinematics(data_cycles):
             start = cycle["in_push"]["time"]
             end = cycle["end_push"]["time"]
             color = colors[i % 2]
-        
+
             plt.axvspan(start, end, color=color, alpha=0.3)
-        
-        plt.plot(data_cycles[side]["ts"].time, data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0], label = f"Meta2{side}")
+
+        plt.plot(
+            data_cycles[side]["ts"].time,
+            data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0],
+            label=f"Meta2{side}",
+        )
         plt.xlabel("Time (s)")
         plt.legend()
-        
+
         plt.tight_layout()
-        plt.show()
+
 
 def plot_side_kinematics(data_cycles, side):
-    
+
     # Plot Position and velocity
     plt.figure()
     plt.suptitle(f"Kinematics {side} side")
     plt.subplot(3, 1, 1)
     plt.title("Position")
     colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
-    
+
     for i, cycle in enumerate(data_cycles[side]["cycles"]):
         start = cycle["in_push"]["time"]
         end = cycle["end_push"]["time"]
         color = colors[i % 2]
-    
+
         plt.axvspan(start, end, color=color, alpha=0.3)
-    
-    plt.plot(data_cycles[side]["ts"].time, data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0], label = f"Meta2{side}")
+
+    plt.plot(
+        data_cycles[side]["ts"].time,
+        data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0],
+        label=f"Meta2{side}",
+    )
     plt.xlabel("Time (s)")
     plt.legend()
     plt.subplot(3, 1, 2)
@@ -290,21 +333,21 @@ def plot_side_kinematics(data_cycles, side):
     plt.subplot(3, 1, 3)
     plt.title("Acceleration")
     data_cycles[side]["ts"].plot(f"Meta2{side}_dff")
-    
+
     plt.tight_layout()
-    plt.show()
+
 
 def plot_side_push_pattern(arg, data_cycles, side):
     # Plot single pattern push
     i = 1
 
     plt.figure(figsize=(8, 8))
-    
+
     plt.suptitle(f"push pattern {side} side")
-    
+
     for cycle in data_cycles[side]["cycles"]:
         ax = plt.subplot(6, 7, i)
-    
+
         circle = plt.Circle(
             (
                 arg[f"coordinates_{side}_wheel_center"][0],
@@ -315,20 +358,20 @@ def plot_side_push_pattern(arg, data_cycles, side):
             linestyle="--",
         )
         ax.add_patch(circle)
-    
-        ts = data_cycles[side]["ts"].get_ts_between_times(cycle["in_push"]["time"], cycle["end_push"]["time"])
+
+        ts = data_cycles[side]["ts"].get_ts_between_times(
+            cycle["in_push"]["time"], cycle["end_push"]["time"]
+        )
         ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])
-    
+
         ax.set_xlim(-0.8, 0.2)
         ax.set_ylim(0, 1.15)
-    
+
         ax.set_aspect("equal")
-    
+
         i += 1
 
     plt.tight_layout()
-    plt.show()
-
 
 
 # data = ktk.load("ts_all_.ktk.zip")
@@ -356,18 +399,26 @@ def plot_side_push_pattern(arg, data_cycles, side):
 
 
 def biofeedback_godot(data, arg):
-    
+
     data_biofeedback, data_cycles = biofeedback(data, arg)
-    
-    
-    # plt.close()
-    
-    # plot_sides_kinematics(data_cycles)
-    
-    # plot_side_kinematics(data_cycles, "left")
-    # plot_side_kinematics(data_cycles, "right")
-    
-    # plot_side_push_pattern(arg, data_cycles, "left")
-    # plot_side_push_pattern(arg, data_cycles, "right")
-    
+
+    return data_biofeedback
+
+
+def plot_biofeedback_godot(data, arg):
+
+    data_biofeedback, data_cycles = biofeedback(data, arg)
+
+    plt.close()
+
+    plot_sides_kinematics(data_cycles)
+
+    plot_side_kinematics(data_cycles, "left")
+    plot_side_kinematics(data_cycles, "right")
+
+    plot_side_push_pattern(arg, data_cycles, "left")
+    plot_side_push_pattern(arg, data_cycles, "right")
+
+    plt.show()
+
     return data_biofeedback

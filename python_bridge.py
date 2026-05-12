@@ -20,64 +20,13 @@ sock.bind((UDP_IP, PYTHON_PORT))
 
 running = True
 
-
-def start_optitrack():
-    ot.start()
-
-
 # basics functions
 def biofeedback_godot(arg):
-    ts = ot.fetch()
-
-    ts_local = {k: v.copy() for k, v in ts.items()}
-
-    mini = min(
-        [
-            ts_local["102"].time[-1] - ts_local["102"].time[0],
-            ts_local["201"].time[-1] - ts_local["201"].time[0],
-            ts_local["202"].time[-1] - ts_local["202"].time[0],
-        ]
-    )
-
-    limit_duration = 10
-
-    if mini > limit_duration:
-        ts_local["102"] = ts_local["102"].get_ts_between_times(
-            ts_local["102"].time[-1] - limit_duration, ts_local["102"].time[-1]
-        )
-        ts_local["201"] = ts_local["201"].get_ts_between_times(
-            ts["201"].time[-1] - limit_duration, ts["201"].time[-1]
-        )
-        ts_local["202"] = ts_local["202"].get_ts_between_times(
-            ts["202"].time[-1] - limit_duration, ts["202"].time[-1]
-        )
-
-    # data_biofeedback = {
-    #     "left": {
-    #         "cycle_count": 0,
-    #         "mean_trajectory_meta2": [],
-    #         "mean_push_frequency": float(0.6),
-    #     },
-    #     "right": {
-    #         "cycle_count": 0,
-    #         "mean_trajectory_meta2": [],
-    #         "mean_push_frequency": float(0.6),
-    #     },
-    # }
-
-    data_biofeedback = biofeedback.biofeedback_godot(ts_local, arg)
-    # print(data_biofeedback["left"])
-    _send_data({"type": "response", "data": data_biofeedback})
+    print("biofeedback_godot")
 
 
 def plot_biofeedback_godot(arg):
-    ts = ot.fetch()
-    data_biofeedback = biofeedback.plot_biofeedback_godot(ts, arg)
-    _send_data({"type": "response", "data": data_biofeedback})
-
-
-def clear_data_optitrack():
-    ot.clear()
+    print("plot_biofeedback_godot")
 
 
 # Close this Python app
@@ -90,7 +39,6 @@ def close():
 
 # functions to call anything command : Godot to Python
 command = {
-    "clear_data_optitrack": clear_data_optitrack,
     "biofeedback_godot": biofeedback_godot,
     "plot_biofeedback_godot": plot_biofeedback_godot,
     "close": close,
@@ -108,10 +56,10 @@ def call_command(_json):
             func(_arg)
         else:
             func()
-        # print("request received : ", _command)
+        print("request received : ", _command)
     except:
+        print("error call command")
         True
-        # print("...")
 
 
 # Bridge functions UDP : Python to Godot
@@ -133,16 +81,11 @@ try:
     time.sleep(1)
     _send_data(list(command.keys()))
 
-    ot_thread = threading.Thread(target=start_optitrack, daemon=True)
-    ot_thread.start()
-
     time.sleep(1)
 
     # Listening Godot requests
     while running:
         try:
-
-            # ts = ot.fetch()
 
             message, address = sock.recvfrom(1024)
             commande = message.decode("utf-8")
@@ -156,4 +99,5 @@ except:
     pass
 finally:
     sock.close()
-    ot.stop()
+
+

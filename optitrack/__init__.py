@@ -35,7 +35,7 @@ import kineticstoolkit.lab as ktk
 import numpy as np
 
 # Maximal number of frames to keep in memory
-frame_limit = 20000
+frame_limit = 10000
 
 # Initialize empty lists to store positions, orientations and timestamps
 _data = {}

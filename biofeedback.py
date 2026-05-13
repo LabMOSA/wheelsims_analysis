@@ -1,9 +1,12 @@
 import kineticstoolkit as ktk
 import numpy as np
 import matplotlib.pyplot as plt
-import threading
 import winsound
-import python_bridge
+import time
+import threading
+import optitrack as ot
+
+# import python_bridge
 
 arg = {
     "coordinates_left_wheel_center": [
@@ -22,6 +25,13 @@ arg = {
 }
 
 
+def ma_fonction():
+    total = 0
+    for i in range(1_000_000):
+        total += i
+    return total
+
+
 def bip():
 
     def sequence():
@@ -31,11 +41,13 @@ def bip():
     threading.Thread(target=sequence, daemon=True).start()
 
 
-def biofeedback_godot_(arg):
+def biofeedback_godot_():
+
     print("aaa")
 
 
 def biofeedback_godot(arg):
+    import python_bridge
 
     threading.Thread(target=ot.start, daemon=True).start()
     time.sleep(1)
@@ -108,6 +120,17 @@ def biofeedback_godot(arg):
                     cycles_count += 1
                     cycles.append(data_cycles["left"]["cycles"][-1])
                     bip()
+
+                    push_frequency = data_cycles["left"]["cycles"][-1][
+                        "push_frequency"
+                    ]
+                    data = {
+                        "data": {
+                            "left": {"mean_push_frequency": push_frequency}
+                        }
+                    }
+                    python_bridge._send_data(data)
+
                     # python_bridge._send_data(push_frequency)
             except:
                 True
@@ -706,18 +729,6 @@ def plot_side_push_pattern(arg, data_cycles, side):
         i += 1
 
     plt.tight_layout()
-
-
-import time
-import threading
-import optitrack as ot
-
-
-def ma_fonction():
-    total = 0
-    for i in range(1_000_000):
-        total += i
-    return total
 
 
 if __name__ == "__main__":

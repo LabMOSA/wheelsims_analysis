@@ -20,9 +20,11 @@ sock.bind((UDP_IP, PYTHON_PORT))
 
 running = True
 
+
 # basics functions
 def biofeedback_godot(arg):
     print("biofeedback_godot")
+    biofeedback.biofeedback_godot(arg)
 
 
 def plot_biofeedback_godot(arg):
@@ -73,31 +75,29 @@ def _send_data(data):
         pass
 
 
-# Main
-try:
+if __name__ == "__main__":
+    try:
 
-    # Sending ping request, availables functions to Godot for debug scene
-    print("Python connected to Godot...\n")
-    time.sleep(1)
-    _send_data(list(command.keys()))
+        # Sending ping request, availables functions to Godot for debug scene
+        print("Python connected to Godot...\n")
+        time.sleep(1)
+        _send_data(list(command.keys()))
 
-    time.sleep(1)
+        time.sleep(1)
 
-    # Listening Godot requests
-    while running:
-        try:
+        # Listening Godot requests
+        while running:
+            try:
 
-            message, address = sock.recvfrom(1024)
-            commande = message.decode("utf-8")
-            commande = json.loads(commande)
+                message, address = sock.recvfrom(1024)
+                commande = message.decode("utf-8")
+                commande = json.loads(commande)
 
-            call_command(commande)
+                call_command(commande)
 
-        except socket.timeout:
-            continue
-except:
-    pass
-finally:
-    sock.close()
-
-
+            except socket.timeout:
+                continue
+    except:
+        pass
+    finally:
+        sock.close()

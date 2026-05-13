@@ -1,19 +1,169 @@
 import kineticstoolkit as ktk
 import numpy as np
 import matplotlib.pyplot as plt
+import threading
+import winsound
+import python_bridge
 
-def biofeedback(data, arg, prev_data_cycles):    
-    
+arg = {
+    "coordinates_left_wheel_center": [
+        -0.504 + 0.29,
+        0.295,
+        -0.779,
+    ],
+    "coordinates_right_wheel_center": [
+        -0.500 + 0.29,
+        0.296,
+        -0.204,
+    ],
+    "coordinates_left_hand": [0.081, -0.029, 0.082],
+    "coordinates_right_hand": [0.003, -0.145, 0.010],
+    "wheel_diameter": 0.54,
+}
+
+
+def bip():
+
+    def sequence():
+        winsound.Beep(880, 100)
+        winsound.Beep(880 + 440, 100)
+
+    threading.Thread(target=sequence, daemon=True).start()
+
+
+def biofeedback_godot_(arg):
+    print("aaa")
+
+
+def biofeedback_godot(arg):
+
+    threading.Thread(target=ot.start, daemon=True).start()
+    time.sleep(1)
+
+    _data_biofeedback = None
+    data_cycles = None
+    running = True
+
+    print("Calcul Biofeedback")
+
+    n = 1
+    global cycles
+    cycles = []
+
+    end_push = 0
+    in_push = 0
+    cycles_count = 0
+
+    duration_analysis = []
+
+    try:
+        while running:
+            # time.sleep(0.1)
+
+            debut = time.time()
+            data = ot.fetch()
+            if not data:
+                continue
+
+            # arg = {
+            #     "coordinates_left_wheel_center": [
+            #         -0.504 + 0.29,
+            #         0.295,
+            #         -0.779,
+            #     ],
+            #     "coordinates_right_wheel_center": [
+            #         -0.500 + 0.29,
+            #         0.296,
+            #         -0.204,
+            #     ],
+            #     "coordinates_left_hand": [0.081, -0.029, 0.082],
+            #     "coordinates_right_hand": [0.003, -0.145, 0.010],
+            #     "wheel_diameter": 0.54,
+            # }
+
+            data_biofeedback, data_cycles = biofeedback(data, arg, cycles)
+
+            duration_cycle_analized = float(
+                data_cycles["left"]["ts"].time[-1]
+                - data_cycles["left"]["ts"].time[0]
+            )
+
+            try:
+                if cycles_count == 0:
+                    end_push = float(
+                        data_cycles["left"]["cycles"][-1]["end_push"]["time"]
+                    )
+
+                    cycles_count += 1
+                    cycles.append(data_cycles["left"]["cycles"][-1])
+                    bip()
+
+                elif (
+                    data_cycles["left"]["cycles"][-1]["in_push"]["time"]
+                    > end_push
+                ):
+                    end_push = float(
+                        data_cycles["left"]["cycles"][-1]["end_push"]["time"]
+                    )
+                    cycles_count += 1
+                    cycles.append(data_cycles["left"]["cycles"][-1])
+                    bip()
+                    # python_bridge._send_data(push_frequency)
+            except:
+                True
+
+            fin = time.time()
+
+            # Temps d'éxecution s | Durée de la période analysée s | nombre de cycle détectés | Cadence de poussée
+            try:
+                if cycles_count == n:
+                    push_frequency = float(
+                        1
+                        / (
+                            data_cycles["left"]["cycles"][-1]["end_push"][
+                                "time"
+                            ]
+                            - data_cycles["left"]["cycles"][-1]["in_push"][
+                                "time"
+                            ]
+                        )
+                    )
+                    print(
+                        f"{fin - debut:.6f} s | ",
+                        f"{duration_cycle_analized:.2f} s | ",
+                        f"{cycles_count} | ",
+                        f"{push_frequency}",
+                    )
+                    n += 1
+            except:
+                True
+
+    except KeyboardInterrupt:
+        print("Arrêt...")
+    finally:
+        data_biofeedback, data_cycles = all_ts(data, arg)
+        data_cycles["left"]["cycles"] = cycles
+        data_cycles["right"]["cycles"] = []
+        plot_sides_kinematics(data_cycles)
+        plot_side_kinematics(data_cycles, "left")
+
+        plot_side_push_pattern(arg, data_cycles, "left")
+
+        ot.stop()
+
+
+def biofeedback(data, arg, prev_data_cycles):
+
     # Analyse the last x s of the timeserie
     limit_duration = 5
 
     ts_local = {}
-    
+
     for key in ["102", "201", "202"]:
-    
+
         t_end = data[key].time[-1]
         t_start = max(data[key].time[0], t_end - limit_duration)
-    
+
         ts_local[key] = data[key].get_ts_between_times(t_start, t_end)
 
     mini = min(
@@ -92,7 +242,8 @@ def biofeedback(data, arg, prev_data_cycles):
         ts.time = ts_local[id_streaming].time
 
         ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
-            ts_local[id_streaming].data[id_streaming], data_side[n]["local_meta2"]
+            ts_local[id_streaming].data[id_streaming],
+            data_side[n]["local_meta2"],
         )
 
         t_min = max(ts.time[0], ts_local["102"].time[0])
@@ -133,10 +284,10 @@ def biofeedback(data, arg, prev_data_cycles):
         vel_x = ts.data[f"Meta2{side}_df"]
 
         # Creation des cycles lorsque la direction change --> v = 0 avec critere temporel : durée cycle supérieur à 0.4 s
-        
+
         if np.all(vel_x >= 0) or np.all(vel_x <= 0):
             return []
-        
+
         try:
             ts_events = ktk.cycles.detect_cycles(
                 ts,
@@ -146,12 +297,12 @@ def biofeedback(data, arg, prev_data_cycles):
             )
         except:
             return []
-        
+
         events = [e for e in ts_events.events if e.name != "_"]
-        
+
         if len(events) < 3:
             return []
-        
+
         cycles = []
 
         for i in range(len(events) - 2):
@@ -197,13 +348,13 @@ def biofeedback(data, arg, prev_data_cycles):
                     filtered_1.append(cycle)
                 continue
 
-        #     prev_ranges = np.array(
-        #         [
-        #             filtered_1[-1]["range"],
-        #             filtered_1[-2]["range"],
-        #             filtered_1[-3]["range"],
-        #         ]
-        #     )
+            #     prev_ranges = np.array(
+            #         [
+            #             filtered_1[-1]["range"],
+            #             filtered_1[-2]["range"],
+            #             filtered_1[-3]["range"],
+            #         ]
+            #     )
 
             # prev_ranges = np.array(
             #     [
@@ -232,7 +383,7 @@ def biofeedback(data, arg, prev_data_cycles):
         # Critère cinématique n°2 : condition de traverser le point milieu entre la position la plus antérieure et la plus postérieure générale des 3 derniers cycles
         filtered_2 = []
         signal = pos_x
-            
+
         for r in range(len(cycles)):
             if len(prev_data_cycles) < 3:
                 filtered_2.append(cycles[r])
@@ -288,9 +439,9 @@ def biofeedback(data, arg, prev_data_cycles):
 
     def caculate_mean_three_last_push_frequency(cycles):
         # list push frequency and mean
-        
+
         mean_push_frequency = 0.0
-        
+
         try:
             push_frequency = []
             for i in range(3):
@@ -306,33 +457,32 @@ def biofeedback(data, arg, prev_data_cycles):
         return mean_push_frequency
 
     data_side = initialize_data()
-    
+
     for i in range(2):
-        
+
         t0 = time.time()
         ts, side = process_signals(data_side, i)
         # print("process_signals", time.time() - t0)
-        
+
         t0 = time.time()
         cycles = detect_push_cycles(ts, side, prev_data_cycles)
         # print("detect_cycles", time.time() - t0)
 
         data_cycles[side]["ts"] = ts
         data_cycles[side]["cycles"] = cycles
-        
+
         mean_push_frequency = caculate_mean_three_last_push_frequency(cycles)
         data_biofeedback[side]["mean_push_frequency"] = float(
             mean_push_frequency
         )
-        
 
         data_biofeedback[side]["cycle_count"] = len(cycles)
 
     return data_biofeedback, data_cycles
 
 
-def all_ts(data, arg):    
-    
+def all_ts(data, arg):
+
     ts_local = data
 
     # data biofeedback
@@ -403,7 +553,8 @@ def all_ts(data, arg):
         ts.time = ts_local[id_streaming].time
 
         ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
-            ts_local[id_streaming].data[id_streaming], data_side[n]["local_meta2"]
+            ts_local[id_streaming].data[id_streaming],
+            data_side[n]["local_meta2"],
         )
 
         t_min = max(ts.time[0], ts_local["102"].time[0])
@@ -438,15 +589,14 @@ def all_ts(data, arg):
 
         return ts, side
 
-
     data_side = initialize_data()
-    
+
     for i in range(2):
-        
+
         t0 = time.time()
         ts, side = process_signals(data_side, i)
         # print("process_signals", time.time() - t0)
-        
+
         data_cycles[side]["ts"] = ts
         data_cycles[side]["cycles"] = cycles
 
@@ -558,11 +708,10 @@ def plot_side_push_pattern(arg, data_cycles, side):
     plt.tight_layout()
 
 
-
-
 import time
 import threading
 import optitrack as ot
+
 
 def ma_fonction():
     total = 0
@@ -571,87 +720,10 @@ def ma_fonction():
     return total
 
 
-
-
 if __name__ == "__main__":
 
-    
-    threading.Thread(target=ot.start, daemon=True).start()
-    time.sleep(1)
+    biofeedback_godot(arg)
 
-    _data_biofeedback = None
-    data_cycles = None
-    running = True
-
-    print("Calcul Biofeedback")
-
-    n = 1
-    cycles = []
-    
-    end_push = 0
-    in_push = 0
-    cycles_count = 0
-    
-    duration_analysis = []
-
-    try:
-        while running:
-            # time.sleep(0.1)
-            
-            debut = time.time()           
-            data = ot.fetch()
-            if not data: continue
-
-            arg = {
-                "coordinates_left_wheel_center": [-0.504, 0.295, -0.779],
-                "coordinates_right_wheel_center": [-0.500, 0.296, -0.204],
-                "coordinates_left_hand": [0.081, -0.029, 0.082],
-                "coordinates_right_hand": [0.003, -0.145, 0.010],
-                "wheel_diameter": 0.54,
-            }
-            
-            
-            data_biofeedback, data_cycles = biofeedback(data, arg, cycles)
-            
-            
-            
-            duration_cycle_analized = float(data_cycles['left']['ts'].time[-1] - data_cycles['left']['ts'].time[0])
-            
-            
-            try:
-                if cycles_count == 0:
-                    end_push = float(data_cycles["left"]["cycles"][-1]["end_push"]["time"])
-                    
-                    cycles_count += 1
-                    cycles.append(data_cycles["left"]["cycles"][-1])
-                    
-                elif data_cycles["left"]["cycles"][-1]["in_push"]["time"] > end_push:
-                    end_push = float(data_cycles["left"]["cycles"][-1]["end_push"]["time"])
-                    cycles_count += 1
-                    cycles.append(data_cycles["left"]["cycles"][-1])
-            except:
-                True
-
-            fin = time.time()
-            
-            # Temps d'éxecution s | Durée de la période analysée s | nombre de cycle détectés | Cadence de poussée           
-            try:
-                if cycles_count == n:
-                    push_frequency = float(1/(data_cycles["left"]["cycles"][-1]["end_push"]["time"] - data_cycles["left"]["cycles"][-1]["in_push"]["time"]))
-                    print(f"{fin - debut:.6f} s | ", f"{duration_cycle_analized:.2f} s | ", f"{cycles_count} | ", f"{push_frequency}")
-                    n+=1
-            except:
-                True
-                
-    except KeyboardInterrupt:
-        print("Arrêt...")
-    finally:
-        data_biofeedback, data_cycles = all_ts(data, arg)
-        data_cycles["left"]["cycles"] = cycles
-        data_cycles["right"]["cycles"] = []
-        plot_sides_kinematics(data_cycles)
-        
-        ot.stop()
 
 # data = ktk.load("ts_all_.ktk.zip")
 # arg = {

@@ -1,230 +1,188 @@
 import kineticstoolkit as ktk
 import numpy as np
 import matplotlib.pyplot as plt
-import winsound
 import time
 import threading
 import optitrack as ot
 
-# import python_bridge
 
-arg = {
-    "coordinates_left_wheel_center": [
-        -0.504 + 0.29,
-        0.295,
-        -0.779,
-    ],
-    "coordinates_right_wheel_center": [
-        -0.500 + 0.29,
-        0.296,
-        -0.204,
-    ],
-    "coordinates_left_hand": [0.081, -0.029, 0.082],
-    "coordinates_right_hand": [0.003, -0.145, 0.010],
-    "wheel_diameter": 0.54,
-}
+def biofeedback_start(arg):
+
+    def update_data_cycles(cycles, current_window_data):
+        """
+        Updates the global cycle history with newly detected propulsion cycles.
+        """
+
+        try:
+            for side in ["left", "right"]:
+                
+                # Skip if no cycles were detected for this side in the current window
+                if not current_window_data[side]["cycles"]:
+                    continue
+                
+                last_cycle = current_window_data[side]["cycles"][-1]
+
+                # If history cycles is empty for this side, safely append the first cycle
+                if len(cycles[side]) == 0:
+                    cycles[side].append(last_cycle)
+
+                else:
+                    in_push_time = float(last_cycle["in_push"]["time"])
+                    end_push_time = float(cycles[side][-1]["end_push"]["time"])
+                    
+                    # Check if a new cycle started after the previous one ended
+                    if in_push_time > end_push_time:
+                        cycles[side].append(last_cycle)
+
+        except Exception as e:
+            print(f"update_data_cycles : {e}")
+        return cycles
+
+    def send_data_godot(new_cycle_send, cycles):
+        """
+        Compute and send to Godot the median push frequency and the last 3 normalized push patterns whenever a new cycle is detected
+        """
+
+        for side in ["left", "right"]:
+
+            if len(cycles[side]) >= 3 and len(cycles[side]) == new_cycle_send[side]:
+                
+                mean_push_frequency = float(np.median([
+                    cycles[side][-1]["push_frequency"],
+                    cycles[side][-2]["push_frequency"],
+                    cycles[side][-3]["push_frequency"],
+                                            ]))
+                            
+                last_push_pattern_1 = cycles[side][-1]["normalised_push_pattern"].tolist()
+                last_push_pattern_2 = cycles[side][-2]["normalised_push_pattern"].tolist()
+                last_push_pattern_3 = cycles[side][-3]["normalised_push_pattern"].tolist()
+    
+                data = {"data": {side: {"mean_push_frequency": mean_push_frequency,
+                                        "last_push_pattern_1": last_push_pattern_1,
+                                        "last_push_pattern_2": last_push_pattern_2,
+                                        "last_push_pattern_3": last_push_pattern_3,
+                                        }}}  
+    
+                python_bridge._send_data(data)
+                
+                new_cycle_send[side] += 1
+        
+        return new_cycle_send
 
 
-def ma_fonction():
-    total = 0
-    for i in range(1_000_000):
-        total += i
-    return total
+    def print_log(new_cycle_log, cycles, current_window_data):
+        """
+        Display push data when a cycle is detected.
+        (ex) side : push n°X | execution duration: X.XXXXXX | time windowed: X.XX | push frequency: X.XX | Push Pattern: last [X, Y, Z]
+        """  
 
+        try:
+            for side in ["left", "right"]:
 
-def bip():
+                if len(cycles[side]) == new_cycle_log[side]:
+                    
+                    push_frequency = cycles[side][-1]["push_frequency"]
+                    push_pattern = cycles[side][-1]["normalised_push_pattern"][-1]
 
-    def sequence():
-        winsound.Beep(880, 100)
-        winsound.Beep(880 + 440, 100)
+                    duration_cycle_analized = current_window_data[side]["ts"].time[-1] - current_window_data[side]["ts"].time[0]
+                    
+                    print(
+                        f"{f'{side}':<8} "
+                        f" : Push n°{len(cycles[side]):<3} | "
+                        f"Time execution: {fin - debut:<8.6f} s | "
+                        f"Time data windowed: {duration_cycle_analized:<4.2f} s | "
+                        f"Push frequency: {push_frequency:<4.2f} Hz | "
+                        # f"Push pattern: {push_pattern}"
+                    )
+                    
+                    new_cycle_log[side] += 1
 
-    threading.Thread(target=sequence, daemon=True).start()
+        except Exception as e:
+            print(f"print_log : {e}")
+            
+        return new_cycle_log
 
-
-def biofeedback_godot_():
-
-    print("aaa")
-
-
-def biofeedback_godot(arg):
     import python_bridge
 
     threading.Thread(target=ot.start, daemon=True).start()
     time.sleep(1)
 
-    _data_biofeedback = None
-    data_cycles = None
+    print("Biofeedback started")
+
+    current_window_data = None
     running = True
-
-    print("Calcul Biofeedback")
-
-    n = 1
+    
     global cycles
-    cycles = []
-
-    end_push = 0
-    in_push = 0
-    cycles_count = 0
-
-    duration_analysis = []
+    cycles = {"left": [],"right": []}
+    
+    new_cycle_log = {"left": 1,"right": 1}
+    new_cycle_send = {"left": 3,"right": 3}
 
     try:
         while running:
-            # time.sleep(0.1)
-
+            
             debut = time.time()
-            data = ot.fetch()
+            
+            try:
+                data = ot.fetch()
+            except Exception as e:
+                continue
+            
             if not data:
                 continue
 
-            # arg = {
-            #     "coordinates_left_wheel_center": [
-            #         -0.504 + 0.29,
-            #         0.295,
-            #         -0.779,
-            #     ],
-            #     "coordinates_right_wheel_center": [
-            #         -0.500 + 0.29,
-            #         0.296,
-            #         -0.204,
-            #     ],
-            #     "coordinates_left_hand": [0.081, -0.029, 0.082],
-            #     "coordinates_right_hand": [0.003, -0.145, 0.010],
-            #     "wheel_diameter": 0.54,
-            # }
-
-            data_biofeedback, data_cycles = biofeedback(data, arg, cycles)
-
-            duration_cycle_analized = float(
-                data_cycles["left"]["ts"].time[-1]
-                - data_cycles["left"]["ts"].time[0]
-            )
-
-            try:
-                if cycles_count == 0:
-                    end_push = float(
-                        data_cycles["left"]["cycles"][-1]["end_push"]["time"]
-                    )
-
-                    cycles_count += 1
-                    cycles.append(data_cycles["left"]["cycles"][-1])
-                    bip()
-
-                elif (
-                    data_cycles["left"]["cycles"][-1]["in_push"]["time"]
-                    > end_push
-                ):
-                    end_push = float(
-                        data_cycles["left"]["cycles"][-1]["end_push"]["time"]
-                    )
-                    cycles_count += 1
-                    cycles.append(data_cycles["left"]["cycles"][-1])
-                    bip()
-
-                    push_frequency = data_cycles["left"]["cycles"][-1][
-                        "push_frequency"
-                    ]
-                    data = {
-                        "data": {
-                            "left": {"mean_push_frequency": push_frequency}
-                        }
-                    }
-                    python_bridge._send_data(data)
-
-                    # python_bridge._send_data(push_frequency)
-            except:
-                True
+            current_window_data = analyze_current_window(data, arg, cycles, limit_duration=5)
+            cycles = update_data_cycles(cycles, current_window_data)
+            new_cycle_send = send_data_godot(new_cycle_send, cycles)
 
             fin = time.time()
 
-            # Temps d'éxecution s | Durée de la période analysée s | nombre de cycle détectés | Cadence de poussée
-            try:
-                if cycles_count == n:
-                    push_frequency = float(
-                        1
-                        / (
-                            data_cycles["left"]["cycles"][-1]["end_push"][
-                                "time"
-                            ]
-                            - data_cycles["left"]["cycles"][-1]["in_push"][
-                                "time"
-                            ]
-                        )
-                    )
-                    print(
-                        f"{fin - debut:.6f} s | ",
-                        f"{duration_cycle_analized:.2f} s | ",
-                        f"{cycles_count} | ",
-                        f"{push_frequency}",
-                    )
-                    n += 1
-            except:
-                True
+            new_cycle_log = print_log(new_cycle_log, cycles, current_window_data)
 
+    except Exception as e:
+        print(f"main while : {e}")
     except KeyboardInterrupt:
-        print("Arrêt...")
+        print("Arret")
     finally:
-        data_biofeedback, data_cycles = all_ts(data, arg)
-        data_cycles["left"]["cycles"] = cycles
-        data_cycles["right"]["cycles"] = []
-        plot_sides_kinematics(data_cycles)
-        plot_side_kinematics(data_cycles, "left")
-
-        plot_side_push_pattern(arg, data_cycles, "left")
-
+        
         ot.stop()
+        
+        try:
+            """
+            Display full kinematics and push pattern graphics at script termination.
+            Reconstructs the global session dataset (limit_duration=0) and injects 
+            the complete accumulated cycle history for both sides.
+            """
+            
+            data_cycles = analyze_current_window(data, arg, {"left": [],"right": []}, limit_duration=0)
+            data_cycles["left"]["cycles"] = cycles["left"]
+            data_cycles["right"]["cycles"] = cycles["right"]
+            
+            plot_sides_kinematics(data_cycles)
+            
+            plot_side_kinematics(data_cycles, "left")
+            plot_side_kinematics(data_cycles, "right")
+    
+            plot_side_push_pattern(arg, data_cycles, "left")
+            plot_side_push_pattern(arg, data_cycles, "right")
+            
+            plt.show()
+            
+        except Exception as e:
+            print(f"Display full kinematics and push pattern : {e}")
 
+def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
+    """
+    Extracts kinematics and validated propulsion cycles from the current time window
+    """
 
-def biofeedback(data, arg, prev_data_cycles):
-
-    # Analyse the last x s of the timeserie
-    limit_duration = 5
-
-    ts_local = {}
-
-    for key in ["102", "201", "202"]:
-
-        t_end = data[key].time[-1]
-        t_start = max(data[key].time[0], t_end - limit_duration)
-
-        ts_local[key] = data[key].get_ts_between_times(t_start, t_end)
-
-    mini = min(
-        [
-            ts_local["102"].time[-1] - ts_local["102"].time[0],
-            ts_local["201"].time[-1] - ts_local["201"].time[0],
-            ts_local["202"].time[-1] - ts_local["202"].time[0],
-        ]
-    )
-
-    # data biofeedback
-    data_biofeedback = {
-        "left": {
-            "cycle_count": None,
-            "mean_trajectory_meta2": [],
-            "mean_push_frequency": None,
-        },
-        "right": {
-            "cycle_count": None,
-            "mean_trajectory_meta2": [],
-            "mean_push_frequency": None,
-        },
-    }
-
-    # data cycles
-    data_cycles = {
-        "left": {
-            "ts": None,
-            "cycles": None,
-        },
-        "right": {
-            "ts": None,
-            "cycles": None,
-        },
-    }
-
-    def initialize_data():
-
+    def initialize_data_side():
+        
+        """
+        Initializes and structures calibration coordinates for both sides.
+        """
+        
+        # Get and convert coordinates to homogeneous arrays [X, Y, Z, 1.0]
         coordinates_left_wheel_center = np.array(
             [arg["coordinates_left_wheel_center"] + [1.0]]
         )
@@ -239,6 +197,7 @@ def biofeedback(data, arg, prev_data_cycles):
             [arg["coordinates_right_hand"] + [1.0]]
         )
 
+        # Set a dictionnary of side-specific metadata and tracking IDs
         data_side = [
             {
                 "id_streaming": "201",
@@ -255,28 +214,55 @@ def biofeedback(data, arg, prev_data_cycles):
         ]
 
         return data_side
+    
+    def data_windowed(data, limit_duration):
+        """
+        Slices the lastest N seconds of the time series to optimize real-time processing 
+        """
+        
+        data_windowed = {}
+        
+        if limit_duration == 0:
+            return data
+        
+        # Iterate through rigid bodies : simulator frame (102), left forearm (201) and right forearm (202) 
+        for key in ["102", "201", "202"]:
 
-    def process_signals(data_side, n):
+            t_end = data[key].time[-1]
+            t_start = max(data[key].time[0], t_end - limit_duration)
 
+            data_windowed[key] = data[key].get_ts_between_times(t_start, t_end)
+
+        return data_windowed
+
+    def compute_local_kinematics(data_windowed, data_side, n):
+        """
+        Transforms timeseries tracking data into filtered local kinematics for a single side.
+        """
+
+        # Extract side-specific configuration and streaming tracking ID
         id_streaming = data_side[n]["id_streaming"]
         side = data_side[n]["side"]
-
+        
+        # Estimate second metacarpal (Meta2) position using the forearm cluster reference frame 
         ts = ktk.TimeSeries()
-        ts.time = ts_local[id_streaming].time
+        ts.time = data_windowed[id_streaming].time
 
         ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
-            ts_local[id_streaming].data[id_streaming],
+            data_windowed[id_streaming].data[id_streaming],
             data_side[n]["local_meta2"],
         )
 
-        t_min = max(ts.time[0], ts_local["102"].time[0])
-        t_max = min(ts.time[-1], ts_local["102"].time[-1])
+        # Find the common overlapping time window and resample the forearm signals onto the simulator frame's timeline
+        t_min = max(ts.time[0], data_windowed["102"].time[0])
+        t_max = min(ts.time[-1], data_windowed["102"].time[-1])
 
-        ts_data = ts_local["102"].get_ts_between_times(t_min, t_max)
+        ts_data = data_windowed["102"].get_ts_between_times(t_min, t_max)
         ts = ts.get_ts_between_times(t_min, t_max)
 
         ts = ts.resample(ts_data.time)
 
+        # Transform Meta2 coordinates from the global tracking system to the simulator's local coordinate system
         ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(
             global_coordinates=ts.data[f"Meta2{side}"],
             reference_frames=ts_data.data["102"],
@@ -302,12 +288,14 @@ def biofeedback(data, arg, prev_data_cycles):
         return ts, side
 
     def detect_push_cycles(ts, side, prev_data_cycles):
-
+        """
+        Detects voluntary propulsion cycles from position time series based on kinematic and temporal criteria
+        """  
+        
         pos_x = ts.data[f"Meta2{side}"][:, 0]
         vel_x = ts.data[f"Meta2{side}_df"]
 
-        # Creation des cycles lorsque la direction change --> v = 0 avec critere temporel : durée cycle supérieur à 0.4 s
-
+        # Cycle detection upon velocity zero-crossing with temporal criterion (duration > 0.4 s)
         if np.all(vel_x >= 0) or np.all(vel_x <= 0):
             return []
 
@@ -338,54 +326,52 @@ def biofeedback(data, arg, prev_data_cycles):
                 index_t = ts.get_index_at_time(events[i].time)
                 index_t1 = ts.get_index_at_time(events[i + 1].time)
                 index_t2 = ts.get_index_at_time(events[i + 2].time)
+                
+                t = events[i].time
+                t1 = events[i + 1].time
+                t2 = events[i + 2].time
 
                 delta_t = events[i + 2].time - events[i].time
 
                 if delta_t > 0.4:
+                    
+                    
+                    ts_cycle = ts.get_ts_between_times(t, t2)
+                    ts_cycle.time = np.linspace(0, 100, len(ts_cycle.time))
+
+                    ts_normalised = ts_cycle.resample(np.linspace(0, 100, 101))
+                    
+                    normalised_push_pattern = ts_normalised.data[f"Meta2{side}"][:, 0:3]
+                                        
                     cycles.append(
                         {
                             "in_push": {
-                                "time": events[i].time,
-                                "value": pos_x[index_t],
+                                "time": float(events[i].time),
+                                "value": float(pos_x[index_t]),
                             },
                             "recovery": {
-                                "time": events[i + 1].time,
-                                "value": pos_x[index_t1],
+                                "time": float(events[i + 1].time),
+                                "value": float(pos_x[index_t1]),
                             },
                             "end_push": {
-                                "time": events[i + 2].time,
-                                "value": pos_x[index_t2],
+                                "time": float(events[i + 2].time),
+                                "value": float(pos_x[index_t2]),
                             },
-                            "range": pos_x[index_t1] - pos_x[index_t],
-                            "velocity_max": np.nanmax(vel_x[index_t:index_t2]),
-                            "push_frequency": 1 / delta_t,
+                            "range": float(pos_x[index_t1] - pos_x[index_t]),
+                            "velocity_max": float(np.nanmax(vel_x[index_t:index_t2])),
+                            "push_frequency": float(1 / delta_t),
+                            "normalised_push_pattern": normalised_push_pattern,
                         }
                     )
 
-        # Critère cinématique n°1 : amplitude minimale fonction de l'amplitude générale (médiane) des 3 derniers cycles
+        # Kinematic criterion #1: minimum amplitude based on the general amplitude (median) of the last 3 cycles
         filtered_1 = []
 
         for cycle in cycles:
-            if len(filtered_1) <= 3:
+            if len(prev_data_cycles) <= 3:
                 if cycle["velocity_max"] > 0.2:
                     filtered_1.append(cycle)
                 continue
-
-            #     prev_ranges = np.array(
-            #         [
-            #             filtered_1[-1]["range"],
-            #             filtered_1[-2]["range"],
-            #             filtered_1[-3]["range"],
-            #         ]
-            #     )
-
-            # prev_ranges = np.array(
-            #     [
-            #         prev_data_cycles[side]["cycles"][-1]["range"],
-            #         prev_data_cycles[side]["cycles"][-2]["range"],
-            #         prev_data_cycles[side]["cycles"][-3]["range"],
-            #     ]
-            # )
 
             prev_ranges = np.array(
                 [
@@ -403,7 +389,7 @@ def biofeedback(data, arg, prev_data_cycles):
 
         cycles = filtered_1
 
-        # Critère cinématique n°2 : condition de traverser le point milieu entre la position la plus antérieure et la plus postérieure générale des 3 derniers cycles
+        # Kinematic criterion #2: condition to cross the midpoint between the overall most anterior and posterior positions of the last 3 cycles
         filtered_2 = []
         signal = pos_x
 
@@ -435,7 +421,7 @@ def biofeedback(data, arg, prev_data_cycles):
             t0 = ts.get_index_at_time(cycles[r]["in_push"]["time"])
             t2 = ts.get_index_at_time(cycles[r]["end_push"]["time"])
 
-            segment = signal[t0 : t2 + 1]
+            segment = signal[t0: t2 + 1]
 
             crossed_up = False
             crossed_down = False
@@ -460,177 +446,33 @@ def biofeedback(data, arg, prev_data_cycles):
 
         return cycles
 
-    def caculate_mean_three_last_push_frequency(cycles):
-        # list push frequency and mean
-
-        mean_push_frequency = 0.0
-
-        try:
-            push_frequency = []
-            for i in range(3):
-                push_frequency.append(cycles[-i - 1]["push_frequency"])
-            mean_push_frequency = np.median(push_frequency)
-
-        except:
-            try:
-                cycles[-1]["push_frequency"]
-            except:
-                mean_push_frequency = 0
-
-        return mean_push_frequency
-
-    data_side = initialize_data()
-
-    for i in range(2):
-
-        t0 = time.time()
-        ts, side = process_signals(data_side, i)
-        # print("process_signals", time.time() - t0)
-
-        t0 = time.time()
-        cycles = detect_push_cycles(ts, side, prev_data_cycles)
-        # print("detect_cycles", time.time() - t0)
-
-        data_cycles[side]["ts"] = ts
-        data_cycles[side]["cycles"] = cycles
-
-        mean_push_frequency = caculate_mean_three_last_push_frequency(cycles)
-        data_biofeedback[side]["mean_push_frequency"] = float(
-            mean_push_frequency
-        )
-
-        data_biofeedback[side]["cycle_count"] = len(cycles)
-
-    return data_biofeedback, data_cycles
-
-
-def all_ts(data, arg):
-
-    ts_local = data
-
-    # data biofeedback
-    data_biofeedback = {
-        "left": {
-            "cycle_count": None,
-            "mean_trajectory_meta2": [],
-            "mean_push_frequency": None,
-        },
-        "right": {
-            "cycle_count": None,
-            "mean_trajectory_meta2": [],
-            "mean_push_frequency": None,
-        },
+    # Initialize the current window data
+    current_window_data = {
+        "left": {"ts": None, "cycles": None},
+        "right": {"ts": None, "cycles": None}
     }
 
-    # data cycles
-    data_cycles = {
-        "left": {
-            "ts": None,
-            "cycles": None,
-        },
-        "right": {
-            "ts": None,
-            "cycles": None,
-        },
-    }
+    data_side = initialize_data_side()
 
-    def initialize_data():
+    data_windowed = data_windowed(data, limit_duration)
 
-        coordinates_left_wheel_center = np.array(
-            [arg["coordinates_left_wheel_center"] + [1.0]]
-        )
-        coordinates_right_wheel_center = np.array(
-            [arg["coordinates_right_wheel_center"] + [1.0]]
-        )
-
-        coordinates_left_hand = np.array(
-            [arg["coordinates_left_hand"] + [1.0]]
-        )
-        coordinates_right_hand = np.array(
-            [arg["coordinates_right_hand"] + [1.0]]
-        )
-
-        data_side = [
-            {
-                "id_streaming": "201",
-                "local_meta2": coordinates_left_hand,
-                "side": "left",
-                "wheel_center": coordinates_left_wheel_center,
-            },
-            {
-                "id_streaming": "202",
-                "local_meta2": coordinates_right_hand,
-                "side": "right",
-                "wheel_center": coordinates_right_wheel_center,
-            },
-        ]
-
-        return data_side
-
-    def process_signals(data_side, n):
-
-        id_streaming = data_side[n]["id_streaming"]
-        side = data_side[n]["side"]
-
-        ts = ktk.TimeSeries()
-        ts.time = ts_local[id_streaming].time
-
-        ts.data[f"Meta2{side}"] = ktk.geometry.matmul(
-            ts_local[id_streaming].data[id_streaming],
-            data_side[n]["local_meta2"],
-        )
-
-        t_min = max(ts.time[0], ts_local["102"].time[0])
-        t_max = min(ts.time[-1], ts_local["102"].time[-1])
-
-        ts_data = ts_local["102"].get_ts_between_times(t_min, t_max)
-        ts = ts.get_ts_between_times(t_min, t_max)
-
-        ts = ts.resample(ts_data.time)
-
-        ts.data[f"Meta2{side}"] = ktk.geometry.get_local_coordinates(
-            global_coordinates=ts.data[f"Meta2{side}"],
-            reference_frames=ts_data.data["102"],
-        )
-
-        # Set sample rate constant
-        dt = np.median(np.diff(ts.time))
-        time_uniform = np.arange(ts.time[0], ts.time[-1], dt)
-        ts = ts.resample(time_uniform)
-
-        # Filter butterworth order 4 with cut frequency of 6Hz
-        ts = ktk.filters.butter(ts, fc=6, order=4)
-
-        # Add velocity and acceleration timeseries
-        ts_df = ktk.filters.deriv(ts, n=1)
-        ts_dff = ktk.filters.deriv(ts, n=2)
-
-        ts = ts.get_ts_before_index(len(ts.time) - 1)
-        ts.data[f"Meta2{side}_df"] = ts_df.data[f"Meta2{side}"][:, 0]
-        ts = ts.get_ts_before_index(len(ts.time) - 1)
-        ts.data[f"Meta2{side}_dff"] = ts_dff.data[f"Meta2{side}"][:, 0]
-
-        return ts, side
-
-    data_side = initialize_data()
-
+    # Compute kinematics and cycles for left and right sides
     for i in range(2):
 
-        t0 = time.time()
-        ts, side = process_signals(data_side, i)
-        # print("process_signals", time.time() - t0)
+        ts, side = compute_local_kinematics(data_windowed, data_side, i)
 
-        data_cycles[side]["ts"] = ts
-        data_cycles[side]["cycles"] = cycles
+        cycles = detect_push_cycles(ts, side, prev_data_cycles[side])
 
-        data_biofeedback[side]["cycle_count"] = len(cycles)
+        current_window_data[side]["ts"] = ts
+        current_window_data[side]["cycles"] = cycles
 
-    return data_biofeedback, data_cycles
+    return current_window_data
 
 
 def plot_sides_kinematics(data_cycles):
-
-    # Plot Position and velocity
+    """
+    Plot Position for both side
+    """
     plt.figure()
     plt.suptitle("Bilateral kinematics")
 
@@ -660,10 +502,10 @@ def plot_sides_kinematics(data_cycles):
 
         plt.tight_layout()
 
-
 def plot_side_kinematics(data_cycles, side):
-
-    # Plot Position and velocity
+    """
+    Plot Position, velocity and acceleration for a single side
+    """
     plt.figure()
     plt.suptitle(f"Kinematics {side} side")
     plt.subplot(3, 1, 1)
@@ -693,95 +535,72 @@ def plot_side_kinematics(data_cycles, side):
 
     plt.tight_layout()
 
-
 def plot_side_push_pattern(arg, data_cycles, side):
-    # Plot single pattern push
-    i = 1
+    """
+    Plot push pattern for a single side
+    """
+    
+    
+    cycles = data_cycles[side]["cycles"]
+    num_cycles = len(cycles)
+    
+    if num_cycles == 0:
+        print(f"No cycles detected to plot for {side} side.")
+        return
+    
+    n_cols = 7
+    n_rows = 6
+    max_cycles_per_page = n_cols * n_rows
+    
+    total_pages = int(np.ceil(num_cycles / max_cycles_per_page))
 
-    plt.figure(figsize=(8, 8))
+    for page in range(1, total_pages + 1):
+        
+        start_idx = (page - 1) * max_cycles_per_page
+        end_idx = min(start_idx + max_cycles_per_page, num_cycles)
+        page_cycles = cycles[start_idx:end_idx]
 
-    plt.suptitle(f"push pattern {side} side")
-
-    for cycle in data_cycles[side]["cycles"]:
-        ax = plt.subplot(6, 7, i)
-
-        circle = plt.Circle(
-            (
-                arg[f"coordinates_{side}_wheel_center"][0],
-                arg[f"coordinates_{side}_wheel_center"][1],
-            ),
-            arg["wheel_diameter"] / 2,
-            fill=False,
-            linestyle="--",
-        )
-        ax.add_patch(circle)
-
-        ts = data_cycles[side]["ts"].get_ts_between_times(
-            cycle["in_push"]["time"], cycle["end_push"]["time"]
-        )
-        ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])
-
-        ax.set_xlim(-0.8, 0.2)
-        ax.set_ylim(0, 1.15)
-
-        ax.set_aspect("equal")
-
-        i += 1
-
-    plt.tight_layout()
+        plt.figure(figsize=(15, n_rows * 2.5))
+        
+    
+        plt.suptitle(f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)", fontsize=14, weight='bold', y=0.98)
+    
+        for i, cycle in enumerate(page_cycles, start=1):
+            ax = plt.subplot(n_rows, n_cols, i)
+    
+            circle = plt.Circle(
+                (
+                    arg[f"coordinates_{side}_wheel_center"][0],
+                    arg[f"coordinates_{side}_wheel_center"][1],
+                ),
+                arg["wheel_diameter"] / 2,
+                fill=False,
+                linestyle="--",
+            )
+            ax.add_patch(circle)
+    
+            ts = data_cycles[side]["ts"].get_ts_between_times(
+                cycle["in_push"]["time"], cycle["end_push"]["time"]
+            )
+            ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])
+    
+            ax.set_xlim(-0.8, 0.2)
+            ax.set_ylim(0, 1.15)
+            ax.set_aspect("equal")
+            global_cycle_number = start_idx + i
+            ax.set_title(f"Push n°{global_cycle_number}", fontsize=9)
+    
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
 if __name__ == "__main__":
+    
+    arg = {
+           "coordinates_left_wheel_center": [-0.504, 0.295, -0.779,],
+           "coordinates_right_wheel_center": [-0.500, 0.296, -0.204,],
+           "coordinates_left_hand": [0.081, -0.029, 0.082],
+           "coordinates_right_hand": [0.003, -0.145, 0.010],
+           "wheel_diameter": 0.54,
+           }
 
-    biofeedback_godot(arg)
-
-
-# data = ktk.load("ts_all_.ktk.zip")
-# arg = {
-#        "coordinates_left_wheel_center": [-0.214146345853806-0.29, 0.295335084199905, -0.779305219650269],
-#        "coordinates_right_wheel_center": [-0.210078418254852-0.29, 0.296095550060272, -0.204232186079025],
-#        "coordinates_left_hand": [0.0819698944687843, -0.029034435749054, 0.082910031080246],
-#        "coordinates_right_hand": [0.00322970747947693, -0.145348995923996, 0.0109105035662651],
-#        "wheel_diameter": 0.54,
-#        }
-
-# data_biofeedback, data_cycles = biofeedback(data, arg)
-
-# plt.close()
-
-# plot_sides_kinematics(data_cycles)
-
-# plot_side_kinematics(data_cycles, "left")
-# plot_side_kinematics(data_cycles, "right")
-
-# plot_side_push_pattern(arg, data_cycles, "left")
-# plot_side_push_pattern(arg, data_cycles, "right")
-
-# for cycle in data_cycles["left"]["cycles"]:
-#     print(1/(cycle["end_push"]["time"] - cycle["in_push"]["time"]))
-
-
-def biofeedback_godot(data, arg):
-
-    data_biofeedback, data_cycles = biofeedback(data, arg)
-
-    return data_biofeedback
-
-
-def plot_biofeedback_godot(data, arg):
-
-    data_biofeedback, data_cycles = biofeedback(data, arg)
-
-    plt.close()
-
-    plot_sides_kinematics(data_cycles)
-
-    plot_side_kinematics(data_cycles, "left")
-    plot_side_kinematics(data_cycles, "right")
-
-    plot_side_push_pattern(arg, data_cycles, "left")
-    plot_side_push_pattern(arg, data_cycles, "right")
-
-    plt.show()
-
-    return data_biofeedback
+    biofeedback_start(arg)

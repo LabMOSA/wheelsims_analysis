@@ -18,16 +18,14 @@ def _close():
     is_running[0] = False
 
 
-# functions to call anything command : Godot to Python
 COMMAND_MAPPING = {
     "biofeedback_godot": biofeedback.biofeedback_godot,
     "close": _close,
 }
 
 
-# Bridge functions UDP : Python to Godot
 def send_data(data):
-
+    """Encode data to JSON and send it via UDP."""
     message = json.dumps(data).encode("utf-8")
     sock.sendto(message, (UDP_IP, GODOT_PORT))
 
@@ -50,32 +48,36 @@ if __name__ == "__main__":
     # Listening Godot requests
     while is_running[0]:
 
-        try:
-            message, address = sock.recvfrom(1024)
+        # Execute every command in the UDP buffer
+        while True:  # until there's nothing available anymore
+            try:
+                message, address = sock.recvfrom(1024)
 
-            command_dict = json.loads(message.decode("utf-8"))
-            command = command_dict["command"]
-            run_mode = command_dict["run_mode"]
-            args = command_dict["args"]
+                command_dict = json.loads(message.decode("utf-8"))
+                command = command_dict["command"]
+                run_mode = command_dict["run_mode"]
+                args = command_dict["args"]
 
-            if run_mode == "start":
-                if command not in running_commands:
-                    running_commands[command] = {"args": args}
+                if run_mode == "start":
+                    if command not in running_commands:
+                        running_commands[command] = {"args": args}
 
-            elif run_mode == "stop":
-                if command in running_commands:
-                    running_commands.pop(command)
+                elif run_mode == "stop":
+                    if command in running_commands:
+                        running_commands.pop(command)
 
-            elif run_mode == "once":
-                command_dict["command"](command_dict["args"])
+                elif run_mode == "once":
+                    command_dict["command"](command_dict["args"])
 
-            else:
-                raise ValueError("frequency must be 'start', 'stop' or 'once'")
+                else:
+                    raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
-        except socket.timeout:
+            except socket.timeout:
+                break
 
-            for command in running_commands:
-                command(running_commands[command]["args"])
+        # Execute every repeating command
+        for command in running_commands:
+            command(running_commands[command]["args"])
 
     # Quit
     sock.close()

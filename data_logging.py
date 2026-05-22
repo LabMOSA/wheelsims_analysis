@@ -13,7 +13,10 @@ def find_files(folder, scene, participant):
         data_folder = os.path.join(folder, participant)
         files = glob.glob(os.path.join(data_folder, '*.csv'))
         sessions = [int(file.split('\\')[-1].split('_')[0].split('S')[1]) for file in files]
-        session = str(max(sessions))
+        if(len(sessions)>0):
+            session = str(max(sessions))
+        else:
+            session = '0'
         filtered_files = glob.glob(os.path.join(data_folder, '*S'+session+'_'+str(date.today())+'*.csv'))
         
         filename_base = filtered_files[0].rsplit('_', 1)[0]+'_'
@@ -25,6 +28,7 @@ def save_file(base, timestamp, data_type, data_values):
     filename=base+data_type+'.csv'
     
     data_line=[timestamp]+[x for x in data_values.strip('()').split(',')]
+    # add appropriate values for last column
     if(data_type=='position'):
         data_line.append('1')
     elif(data_type=='rotation'):
@@ -39,13 +43,13 @@ def is_nan(val):
 
 def save_data(arg):
     files, base = find_files(arg['folder'], arg['scene'], arg['participant'])
-    data_to_save = dict(list(arg.items())[3:])
+    data_to_save = {key: arg[key] for key in ['time', 'position', 'rotation', 'wheels', 'motion'] if key in arg} #dict(list(arg.items())[3:])
     
     for i in range(len(data_to_save)-1):
         # only save if data was received
-        if(is_nan(list(data_to_save.values())[i+1])==False):
+        if((list(data_to_save.values())[i+1]) is not None):
             save_file(base, data_to_save['time'], list(data_to_save.keys())[i+1], list(data_to_save.values())[i+1])
-
+            
 if __name__ == "__main__":
     arg = {"folder": r'D:\Maria_school\Documents\S2026\data',
            "scene": "scene",

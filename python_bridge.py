@@ -13,7 +13,7 @@ is_running = [True]
 running_commands = {}
 
 
-def _close():
+def _close(args=None):
     """Close the Python app."""
     print("\nClose Python app...")
     time.sleep(2)
@@ -22,7 +22,7 @@ def _close():
 
 # functions to call anything command : Godot to Python
 COMMAND_MAPPING = {
-    "biofeedback_godot": biofeedback.biofeedback_start,
+    #"biofeedback_godot": biofeedback.biofeedback_start,
     "close": _close,
     "create_file" : create_file.create_files,
     "data_logging" : data_logging.save_data
@@ -77,9 +77,9 @@ if __name__ == "__main__":
                 raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
         except BlockingIOError:
-            break
+            pass
         except ConnectionResetError:
-            break
+            pass
 
     for command in running_commands:
         COMMAND_MAPPING[command](running_commands[command]["args"])

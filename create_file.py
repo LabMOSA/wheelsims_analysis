@@ -12,6 +12,7 @@ def make_folder(data_folder, participant):
     folder = os.path.join(data_folder, participant)
     if not os.path.exists(folder):
         os.makedirs(folder)
+    print('getting ready within folder ', folder)
     return folder
 
 def get_session(folder):
@@ -39,8 +40,8 @@ def make_filenames(session, scene, data_to_save):
 
 def make_csv(folder, filename, header):
     with open(os.path.join(folder, filename), 'w', newline='') as file:
-                writer = csv.writer(file) 
-                writer.writerow(header)
+        writer = csv.writer(file) 
+        writer.writerow(header)
 
 def create_files(arg):
     folder = make_folder(arg['folder'], arg['participant'])
@@ -51,7 +52,7 @@ def create_files(arg):
     
     for i in range(len(filenames)):
         make_csv(folder, filenames[i], headers[i])
-        print('Created '+filenames[i])
+        print('Created the file '+filenames[i])
 
 if __name__ == "__main__":
     arg = {"folder": r'D:\Maria_school\Documents\S2026\data',

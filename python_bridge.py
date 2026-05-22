@@ -2,6 +2,8 @@ import socket
 import json
 import time
 import biofeedback
+import create_file
+import data_logging
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -20,8 +22,10 @@ def _close():
 
 # functions to call anything command : Godot to Python
 COMMAND_MAPPING = {
-    "biofeedback_godot": biofeedback.biofeedback_godot,
+    "biofeedback_godot": biofeedback.biofeedback_start,
     "close": _close,
+    "create_file" : create_file.create_files,
+    "data_logging" : data_logging.save_data
 }
 
 
@@ -67,15 +71,18 @@ if __name__ == "__main__":
                     running_commands.pop(command)
 
             elif run_mode == "once":
-                command_dict["command"](command_dict["args"])
+                COMMAND_MAPPING[command](command_dict["args"])
 
             else:
                 raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
-        except socket.timeout:
+        except BlockingIOError:
+            break
+        except ConnectionResetError:
+            break
 
-            for command in running_commands:
-                command(running_commands[command]["args"])
+    for command in running_commands:
+        COMMAND_MAPPING[command](running_commands[command]["args"])
 
     # Quit
     sock.close()

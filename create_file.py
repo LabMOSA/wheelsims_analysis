@@ -12,7 +12,7 @@ def make_folder(data_folder, participant):
     folder = os.path.join(data_folder, participant)
     if not os.path.exists(folder):
         os.makedirs(folder)
-    print('getting ready within folder ', folder)
+    print('Preparing to save onto folder ', folder)
     return folder
 
 def get_session(folder):

@@ -25,7 +25,6 @@ import socket
 import json
 import time
 import biofeedback
-import create_file
 import data_logging
 
 UDP_IP = "127.0.0.1"
@@ -51,8 +50,8 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
-    "create_file" : create_file.create_files,
-    "data_logging" : data_logging.save_data
+    "create_file": data_logging.create_files,
+    "data_logging": data_logging.save_data,
 }
 
 

@@ -2,12 +2,67 @@ import kineticstoolkit as ktk
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-import threading
 import optitrack as ot
-from python_bridge import send_data
 
 
-def biofeedback_start(arg):
+results = {
+    "run_mode": "stop",
+    "data": None,
+    "current_window_data": None,
+    "cycles": {"left": [],"right": []},
+    "new_cycle_log": {"left": 1,"right": 1},
+    "new_cycle_send": {"left": 3,"right": 3},
+    "ts_full": None,
+    }
+
+    
+def biofeedback_stop(arg):
+    """
+    Clear all data.
+    Stop the module optitrack and clear the ot data.
+    Display the full kinematics and push pattern graphics (by default is commented)
+    """
+    
+    try:
+    
+        # Display full kinematics and push pattern graphics at script termination.
+        # Reconstructs the global session dataset (limit_duration=0) and injects
+        # the complete accumulated cycle history for both sides.
+        
+        data_cycles = analyze_current_window(results["data"], arg, {"left": [],"right": []}, limit_duration=0)
+        data_cycles["left"]["cycles"] = results["cycles"]["left"]
+        data_cycles["right"]["cycles"] = results["cycles"]["right"]
+
+        plot_sides_kinematics(data_cycles)
+
+        plot_side_kinematics(data_cycles, "left")
+        plot_side_kinematics(data_cycles, "right")
+
+        plot_side_push_pattern(arg, data_cycles, "left")
+        plot_side_push_pattern(arg, data_cycles, "right")
+
+    except Exception as e:
+        print(f"Display full kinematics and push pattern : {e}")
+    
+    results.clear()    
+    results.update(init_results())
+
+    ot.stop()
+    ot.clear()
+    
+    print("Biofeedback closed")
+    
+    plt.show()    
+    
+def biofeedback_update(arg):
+    """
+    Execute a real-time update iteration for the biofeedback.
+
+    Handles the live streaming state machine: initializes the OptiTrack acquisition 
+    on startup, fetches new tracking frames, extracts and filters side-specific 
+    kinematics, detects propulsion cycles, logs progress, and streams computed 
+    metrics to Godot.
+    """
 
     def update_data_cycles(cycles, current_window_data):
         """
@@ -43,6 +98,8 @@ def biofeedback_start(arg):
         """
         Compute and send to Godot the median push frequency and the last 3 normalized push patterns whenever a new cycle is detected
         """
+        
+        from python_bridge import send_data
 
         for side in ["left", "right"]:
 
@@ -69,7 +126,6 @@ def biofeedback_start(arg):
                 new_cycle_send[side] += 1
 
         return new_cycle_send
-
 
     def print_log(new_cycle_log, cycles, current_window_data):
         """
@@ -102,73 +158,37 @@ def biofeedback_start(arg):
             print(f"print_log : {e}")
 
         return new_cycle_log
+    
+    if results["run_mode"] == "stop":
+        
+        ot.start()
 
-    threading.Thread(target=ot.start, daemon=True).start()
-    time.sleep(1)
+        time.sleep(1)
 
-    print("Biofeedback started")
-
-    current_window_data = None
-    running = True
-
-    global cycles
-    cycles = {"left": [],"right": []}
-
-    new_cycle_log = {"left": 1,"right": 1}
-    new_cycle_send = {"left": 3,"right": 3}
-
-    try:
-        while running:
-
-            debut = time.time()
-
-            try:
-                data = ot.fetch()
-            except Exception as e:
-                continue
-
-            if not data:
-                continue
-
-            current_window_data = analyze_current_window(data, arg, cycles, limit_duration=5)
-            cycles = update_data_cycles(cycles, current_window_data)
-            new_cycle_send = send_data_godot(new_cycle_send, cycles)
-
-            fin = time.time()
-
-            new_cycle_log = print_log(new_cycle_log, cycles, current_window_data)
-
-    except Exception as e:
-        print(f"main while : {e}")
-    except KeyboardInterrupt:
-        print("Arret")
-    finally:
-
-        ot.stop()
-
+        print("Biofeedback started")
+        
+        results["run_mode"] = "start"
+    
+    elif results["run_mode"] == "start":
+    
+        debut = time.time()
+    
         try:
-            """
-            Display full kinematics and push pattern graphics at script termination.
-            Reconstructs the global session dataset (limit_duration=0) and injects
-            the complete accumulated cycle history for both sides.
-            """
-
-            data_cycles = analyze_current_window(data, arg, {"left": [],"right": []}, limit_duration=0)
-            data_cycles["left"]["cycles"] = cycles["left"]
-            data_cycles["right"]["cycles"] = cycles["right"]
-
-            plot_sides_kinematics(data_cycles)
-
-            plot_side_kinematics(data_cycles, "left")
-            plot_side_kinematics(data_cycles, "right")
-
-            plot_side_push_pattern(arg, data_cycles, "left")
-            plot_side_push_pattern(arg, data_cycles, "right")
-
-            plt.show()
-
+            results["data"] = ot.fetch()
         except Exception as e:
-            print(f"Display full kinematics and push pattern : {e}")
+            print(e)
+        
+        if not results["data"]:
+            return
+
+        fin = time.time()
+        
+        results["current_window_data"] = analyze_current_window(results["data"], arg, results["cycles"], limit_duration=5)
+        results["cycles"] = update_data_cycles(results["cycles"], results["current_window_data"])
+        
+        results["new_cycle_send"] = send_data_godot(results["new_cycle_send"], results["cycles"])
+        
+        results["new_cycle_log"] = print_log(results["new_cycle_log"], results["cycles"], results["current_window_data"])
 
 def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
     """
@@ -345,15 +365,15 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
                     cycles.append(
                         {
                             "in_push": {
-                                "time": float(events[i].time),
+                                "time": float(t),
                                 "value": float(pos_x[index_t]),
                             },
                             "recovery": {
-                                "time": float(events[i + 1].time),
+                                "time": float(t1),
                                 "value": float(pos_x[index_t1]),
                             },
                             "end_push": {
-                                "time": float(events[i + 2].time),
+                                "time": float(t2),
                                 "value": float(pos_x[index_t2]),
                             },
                             "range": float(pos_x[index_t1] - pos_x[index_t]),
@@ -591,6 +611,19 @@ def plot_side_push_pattern(arg, data_cycles, side):
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
+def init_results():
+    
+    results = {
+        "run_mode": "stop",
+        "data": None,
+        "current_window_data": None,
+        "cycles": {"left": [],"right": []},
+        "new_cycle_log": {"left": 1,"right": 1},
+        "new_cycle_send": {"left": 3,"right": 3},
+        "ts_full": None,
+        }
+
+    return results
 
 if __name__ == "__main__":
 
@@ -601,5 +634,10 @@ if __name__ == "__main__":
            "coordinates_right_hand": [0.003, -0.145, 0.010],
            "wheel_diameter": 0.54,
            }
-
-    biofeedback_start(arg)
+    
+    try:
+        while True:
+            biofeedback_update(arg)
+    except KeyboardInterrupt:
+        print("Biofeedback closed")
+        biofeedback_stop(arg)

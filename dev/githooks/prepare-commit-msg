@@ -1,0 +1,24 @@
+#!/bin/sh
+# $1 = commit message file, $2 = commit source
+# skip when source is merge, squash, or commit-msg provided
+case "$2" in
+  merge|squash|commit) exit 0 ;;
+esac
+
+MSGFILE="$1"
+[ -z "$MSGFILE" ] && exit 0
+
+# get branch, replace slashes with -
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-')
+[ -z "$BRANCH" ] && exit 0
+
+# don't double-prepend if already present like [branch] or branch:
+FIRSTLINE=$(sed -n '1p' "$MSGFILE")
+echo "$FIRSTLINE" | grep -Eq "^\[?$BRANCH\]?|^$BRANCH[: ]" && exit 0
+
+# Prepend in format [branch] 
+# macOS sed requires -i '' for in-place
+TMP="$(mktemp)"
+printf "[%s] " "$BRANCH" > "$TMP"
+cat "$MSGFILE" >> "$TMP"
+mv "$TMP" "$MSGFILE"

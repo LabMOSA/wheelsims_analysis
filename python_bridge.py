@@ -25,8 +25,6 @@ import socket
 import json
 import time
 import biofeedback
-import create_file
-import data_logging
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -48,11 +46,9 @@ def _close(args=None):
 
 
 COMMAND_MAPPING = {
-    #"biofeedback_update": biofeedback.biofeedback_update,
-    #"biofeedback_stop": biofeedback.biofeedback_stop,
+    "biofeedback_update": biofeedback.biofeedback_update,
+    "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
-    "create_file" : create_file.create_files,
-    "data_logging" : data_logging.save_data
 }
 
 
@@ -70,7 +66,6 @@ def _init_udp_socket():
         _private_vars["sock"].bind((UDP_IP, PYTHON_PORT))
 
 
-# Bridge functions UDP : Python to Godot
 def send_data(data):
     """Encode data to JSON and send it via UDP."""
     _init_udp_socket()
@@ -119,9 +114,9 @@ if __name__ == "__main__":
                     )
 
             except BlockingIOError:
-                pass
+                break
             except ConnectionResetError:
-                pass
+                break
 
         # Execute every repeating command
         for command in _running_commands:

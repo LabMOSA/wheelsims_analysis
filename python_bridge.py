@@ -1,3 +1,26 @@
+"""
+Execute python commands with arguments, repeatedly or once.
+
+This script opens a port (PYTHON_PORT) and listens for JSON strings of this
+form:
+    {
+        "command": str,
+        "args": any
+        "run_mode": "once", "start" or "stop"
+    }
+
+For run_mode == "once", the function listed in COMMAND_MAPPING[command] is
+executed once.
+
+For run_mode == "start", the function listed in COMMAND_MAPPING[command] starts
+being executed continuously. Many functions can be started at the same time;
+in this case they are executed one after the other, continuously.
+
+For run_mode == "stop", the function listed in COMMAND_MAPPING[command] stops
+being executed consinuously.
+
+"""
+
 import socket
 import json
 import time
@@ -9,40 +32,55 @@ UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
 GODOT_PORT = 4242
 
-is_running = [True]
-running_commands = {}
+_private_vars = {
+    "is_running": True,
+    "sock": None,
+}
+
+_running_commands = {}
 
 
 def _close(args=None):
     """Close the Python app."""
     print("\nClose Python app...")
     time.sleep(2)
-    is_running[0] = False
+    _private_vars["is_running"] = False
 
 
-# functions to call anything command : Godot to Python
 COMMAND_MAPPING = {
-    #"biofeedback_godot": biofeedback.biofeedback_start,
+    "biofeedback_update": biofeedback.biofeedback_update,
+    "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
     "create_file" : create_file.create_files,
     "data_logging" : data_logging.save_data
 }
 
 
+def _init_udp_socket():
+    """Initialize the UDP sockets"""
+    if _private_vars["sock"] == None:
+
+        _private_vars["sock"] = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM
+        )
+        _private_vars["sock"].setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+        )
+        _private_vars["sock"].settimeout(0.0)
+        _private_vars["sock"].bind((UDP_IP, PYTHON_PORT))
+
+
 # Bridge functions UDP : Python to Godot
 def send_data(data):
-
+    """Encode data to JSON and send it via UDP."""
+    _init_udp_socket()
     message = json.dumps(data).encode("utf-8")
-    sock.sendto(message, (UDP_IP, GODOT_PORT))
+    _private_vars["sock"].sendto(message, (UDP_IP, GODOT_PORT))
 
 
 if __name__ == "__main__":
 
-    # Init UDP sockets
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.settimeout(0.0)
-    sock.bind((UDP_IP, PYTHON_PORT))
+    _init_udp_socket()
 
     # Sending ping request, availables functions to Godot for debug scene
     print("Python connected to Godot...\n")
@@ -52,37 +90,42 @@ if __name__ == "__main__":
     time.sleep(1)
 
     # Listening Godot requests
-    while is_running[0]:
+    while _private_vars["is_running"]:
 
-        try:
-            message, address = sock.recvfrom(1024)
+        # Execute every command in the UDP buffer
+        while True:  # until there's nothing available anymore
+            try:
+                message, address = _private_vars["sock"].recvfrom(1024)
 
-            command_dict = json.loads(message.decode("utf-8"))
-            command = command_dict["command"]
-            run_mode = command_dict["run_mode"]
-            args = command_dict["args"]
+                command_dict = json.loads(message.decode("utf-8"))
+                command = command_dict["command"]
+                run_mode = command_dict["run_mode"]
+                args = command_dict["args"]
 
-            if run_mode == "start":
-                if command not in running_commands:
-                    running_commands[command] = {"args": args}
+                if run_mode == "start":
+                    if command not in _running_commands:
+                        _running_commands[command] = {"args": args}
 
-            elif run_mode == "stop":
-                if command in running_commands:
-                    running_commands.pop(command)
+                elif run_mode == "stop":
+                    if command in _running_commands:
+                        _running_commands.pop(command)
 
-            elif run_mode == "once":
-                COMMAND_MAPPING[command](command_dict["args"])
+                elif run_mode == "once":
+                    COMMAND_MAPPING[command](command_dict["args"])
 
-            else:
-                raise ValueError("frequency must be 'start', 'stop' or 'once'")
+                else:
+                    raise ValueError(
+                        "frequency must be 'start', 'stop' or 'once'"
+                    )
 
-        except BlockingIOError:
-            pass
-        except ConnectionResetError:
-            pass
+            except BlockingIOError:
+                pass
+            except ConnectionResetError:
+                pass
 
-    for command in running_commands:
-        COMMAND_MAPPING[command](running_commands[command]["args"])
+        # Execute every repeating command
+        for command in _running_commands:
+            COMMAND_MAPPING[command](_running_commands[command]["args"])
 
     # Quit
-    sock.close()
+    _private_vars["sock"].close()

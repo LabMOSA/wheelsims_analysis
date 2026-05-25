@@ -48,8 +48,8 @@ def _close(args=None):
 
 
 COMMAND_MAPPING = {
-    "biofeedback_update": biofeedback.biofeedback_update,
-    "biofeedback_stop": biofeedback.biofeedback_stop,
+    #"biofeedback_update": biofeedback.biofeedback_update,
+    #"biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
     "create_file" : create_file.create_files,
     "data_logging" : data_logging.save_data

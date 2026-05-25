@@ -10,8 +10,14 @@ GODOT_PORT = 4242
 is_running = [True]
 running_commands = {}
 
+# Init UDP sockets
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.settimeout(0.0)
+sock.bind((UDP_IP, PYTHON_PORT))
 
-def _close():
+
+def _close(args=None):
     """Close the Python app."""
     print("\nClose Python app...")
     time.sleep(2)
@@ -19,7 +25,8 @@ def _close():
 
 
 COMMAND_MAPPING = {
-    "biofeedback_godot": biofeedback.biofeedback_godot,
+    "biofeedback_update": biofeedback.biofeedback_update,
+    "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
 }
 
@@ -31,12 +38,6 @@ def send_data(data):
 
 
 if __name__ == "__main__":
-
-    # Init UDP sockets
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.settimeout(0.0)
-    sock.bind((UDP_IP, PYTHON_PORT))
 
     # Sending ping request, availables functions to Godot for debug scene
     print("Python connected to Godot...\n")
@@ -67,17 +68,19 @@ if __name__ == "__main__":
                         running_commands.pop(command)
 
                 elif run_mode == "once":
-                    command_dict["command"](command_dict["args"])
+                    COMMAND_MAPPING[command](command_dict["args"])
 
                 else:
                     raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
-            except socket.timeout:
+            except BlockingIOError:
+                break
+            except ConnectionResetError:
                 break
 
         # Execute every repeating command
         for command in running_commands:
-            command(running_commands[command]["args"])
+            COMMAND_MAPPING[command](running_commands[command]["args"])
 
     # Quit
     sock.close()

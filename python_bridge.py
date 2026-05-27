@@ -25,6 +25,7 @@ import socket
 import json
 import time
 import biofeedback
+import os
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -117,6 +118,9 @@ if __name__ == "__main__":
                 break
             except ConnectionResetError:
                 break
+        
+        # Do not execute repeating commands after shutdown request
+        if not _private_vars["is_running"]: break
 
         # Execute every repeating command
         for command in _running_commands:
@@ -124,3 +128,4 @@ if __name__ == "__main__":
 
     # Quit
     _private_vars["sock"].close()
+    os._exit(0)

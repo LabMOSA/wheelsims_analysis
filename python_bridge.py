@@ -67,11 +67,17 @@ def _init_udp_socket():
         _private_vars["sock"].bind((UDP_IP, PYTHON_PORT))
 
 
-def send_data(data):
+def send_data(command, data):
     """Encode data to JSON and send it via UDP."""
     _init_udp_socket()
-    message = json.dumps(data).encode("utf-8")
-    _private_vars["sock"].sendto(message, (UDP_IP, GODOT_PORT))
+    
+    message = {
+        "command": command, 
+        "data": data
+    }
+ 
+    json_message = json.dumps(message).encode("utf-8")
+    _private_vars["sock"].sendto(json_message, (UDP_IP, GODOT_PORT))
 
 
 if __name__ == "__main__":
@@ -81,7 +87,7 @@ if __name__ == "__main__":
     # Sending ping request, availables functions to Godot for debug scene
     print("Python connected to Godot...\n")
     time.sleep(1)
-    send_data(list(COMMAND_MAPPING.keys()))
+    send_data("ping", list(COMMAND_MAPPING.keys()))
 
     time.sleep(1)
 

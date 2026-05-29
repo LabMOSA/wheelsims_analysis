@@ -115,13 +115,13 @@ def biofeedback_update(arg):
                 last_push_pattern_2 = cycles[side][-2]["normalised_push_pattern"].tolist()
                 last_push_pattern_3 = cycles[side][-3]["normalised_push_pattern"].tolist()
 
-                data = {"data": {side: {"mean_push_frequency": mean_push_frequency,
+                data = {side: {"mean_push_frequency": mean_push_frequency,
                                         "last_push_pattern_1": last_push_pattern_1,
                                         "last_push_pattern_2": last_push_pattern_2,
                                         "last_push_pattern_3": last_push_pattern_3,
-                                        }}}
+                                        }}
 
-                send_data(data)
+                send_data("biofeedback_update", data)
 
                 new_cycle_send[side] += 1
 

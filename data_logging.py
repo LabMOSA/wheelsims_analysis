@@ -3,6 +3,15 @@ from datetime import date
 import csv
 import glob
 
+from nextwheel import NextWheel
+from kineticstoolkit import TimeSeries
+import numpy as np
+
+wheels = {
+    "right": NextWheel(),
+    # "left": NextWheel(),
+}
+
 
 def make_folder(
     data_folder: str,
@@ -35,15 +44,15 @@ def make_folder(
     folder = os.path.join(data_folder, participant, session, trial)
     if not os.path.exists(folder):
         os.makedirs(folder)
-    print("Preparing to save onto folder ", folder)
+        print("Created folder ", folder)
     return folder
 
 
 def get_session(folder: str) -> str:
     """
     Parses folders already in current participant's sub-folder to identify the
-    current session number. If no sessions have been recorded for this
-    participant, the number is set to 0.
+    current session number and not over-write data. If no sessions have been
+    recorded for this participant, the number is set to 0.
 
     Parameters
     ----------
@@ -55,10 +64,11 @@ def get_session(folder: str) -> str:
     session : str
         Current session number.
     """
-    # determining which session number to write to (to not over-write data)
-    files = glob.glob(os.path.join(folder, "*"))
-    if (len(files)) > 0:
-        session = str(len(files) - 1)
+    folders = [
+        f for f in glob.glob(os.path.join(folder, "*")) if os.path.isdir(f)
+    ]
+    if (len(folders)) > 0:
+        session = str(len(folders) - 1)
     else:
         session = "0"
     return session
@@ -80,25 +90,20 @@ def get_trial(folder: str) -> str:
     trial : str
         Current trial number.
     """
-    # determining which session number to write to (to not over-write data)
-    files = glob.glob(os.path.join(folder, "*"))
-    if (len(files)) > 0:
-        trials = [int(file.split("\\T")[-1]) for file in files]
-        trial = str(max(trials) + 1)
+    folders = [
+        f for f in glob.glob(os.path.join(folder, "*")) if os.path.isdir(f)
+    ]
+    if (len(folders)) > 0:
+        trials = [int(folder.split("\\T")[-1]) for folder in folders]
+        trial = str(max(trials))
     else:
         trial = "0"
     return trial
 
 
-def make_headers(
-    data_to_save: list[bool],
-    data_types: list[str] | None = [
-        "position",
-        "rotation",
-        "wheels",
-        "motion",
-    ],
-    data_columns: list[int] | None = [4, 4, 1, 1],
+def make_header(
+    data_type: str,
+    data_column: int | None = 4,
 ) -> list[list[str]]:
     """
     For the user-selected data types to save from the Godot interface, creates
@@ -106,47 +111,29 @@ def make_headers(
 
     Parameters
     ----------
-    data_to_save : list of bool
-        Selections made through Godot interface for data saving. Each entry
-        indicates if the same-index entry in data_types is to be saved or not.
-    data_types : list of str, optional
-        The different data types that can be selected for saving through the
-        Godot interface.
-        The default is ["position", "rotation", "wheels", "motion"].
-    data_columns : list of int, optional
-        For each corresponding entry in data_types, the number of columns to be
-        expected for the file to be saved.
-        The default is [4, 4, 1, 1].
+    data_type : str
+        The data type to be saved through the Godot interface.
+        The options are ["position", "rotation"].
+    data_columns : int, optional
+        The number of columns to be expected for the file to be saved.
+        The default is 4.
 
     Returns
     -------
-    headers : List of str
-        Headers corresponding to each file in files.
+    header : str
+        Header corresponding to the file to be created.
     """
-    headers = []
-    for i in range(len(data_types)):
-        if data_to_save[i] == True:
-            headers.append(
-                ["time"]
-                + [
-                    data_types[i] + "[:," + str(j) + "]"
-                    for j in range(data_columns[i])
-                ]
-            )
-    return headers
+    header = ["time"] + [
+        data_type + "[:," + str(j) + "]" for j in range(data_column)
+    ]
+    return header
 
 
-def make_filenames(
+def make_filename(
     session: str,
     trial: str,
     scene: str,
-    data_to_save: list[bool],
-    data_types: list[str] | None = [
-        "position",
-        "rotation",
-        "wheels",
-        "motion",
-    ],
+    data_type: str,
 ) -> list[str]:
     """
     For the user-selected data types to save from the Godot interface, creates
@@ -160,37 +147,31 @@ def make_filenames(
         Current trial number.
     scene : str
         Current playable scene selected (6 options).
-    data_to_save : list of bool
-        Selections made through Godot interface for data saving. Each entry
-        indicates if the same-index entry in data_types is to be saved or not.
-    data_types : list of str, optional
-        The different data types that can be selected for saving through the
-        Godot interface.
-        The default is ["position", "rotation", "wheels", "motion"].
+    data_type : str
+        The data type to be saved through the Godot interface.
+        The options are ["position", "rotation"].
 
     Returns
     -------
-    files : List of str
-        Names of files to be created.
+    file : str
+        Name of file to be created.
     """
-    files = []
-    for i in range(len(data_types)):
-        if data_to_save[i] == True:
-            files.append(
-                "S"
-                + session
-                + "_"
-                + str(date.today())
-                + "_"
-                + "T"
-                + trial
-                + "_"
-                + scene
-                + "_"
-                + data_types[i]
-                + ".csv"
-            )
-    return files
+    file = (
+        "S"
+        + session
+        + "_"
+        + str(date.today())
+        + "_"
+        + "T"
+        + trial
+        + "_"
+        + scene
+        + "_"
+        + data_type
+        + ".csv"
+    )
+
+    return file
 
 
 def make_csv(folder: str, filename: str, header: list[str]) -> None:
@@ -215,46 +196,199 @@ def make_csv(folder: str, filename: str, header: list[str]) -> None:
         writer.writerow(header)
 
 
-def create_files(
-    arg: dict[str, str, str, bool, bool, bool, bool],
-    data_types: list[str] | None = [
-        "player_position",
-        "player_rotation",
-        "instrumented_wheels",
-        "motion_capture",
-    ],
+def wheel_dicts(
+    filename: str,
+    wheel_data: dict | None = {
+        "Analog": {"Time": [], "Channels": [], "Force": [], "Moment": []},
+        "IMU": {"Time": [], "Acc": [], "Gyro": [], "Mag": []},
+        "Encoder": {"Time": [], "Angle": []},
+        "Power": {"Time": [], "Voltage": [], "Current": [], "Power": []},
+    },
+    wheel_events: dict | None = {},
 ) -> None:
     """
-    Creates empty files where data will be saved during this current session.
+    Creates and saves two dictionaries that will contain the information
+    pertaining to the instrumented wheels: the collected data and the events
+    (logging initiation, new trial initiation, logging termination).
 
     Parameters
     ----------
-    arg : dict[str, str, str, bool, bool, bool, bool]
+    filename : str
+        The base filename for the two dictionaries, of the form: SX_YYYY-MM-DD-
+        where X is the session number.
+    wheel_data : dict | None, optional
+        The dictionary structure required to collect the data from the wheels.
+        The default is {"Analog": {"Time": [], "Channels": [], "Force": [], "Moment": []},
+                        "IMU": {"Time": [], "Acc": [], "Gyro": [], "Mag": []},
+                        "Encoder": {"Time": [], "Angle": []},
+                        "Power": {"Time": [], "Voltage": [], "Current": [], "Power": []}}.
+    wheel_events : dict | None, optional
+        An empty dictionary where events will be collected as
+        wheel_events['event_name'] = timestamps.
+        The default is {}.
+
+    Returns
+    -------
+    None
+    """
+
+    wheel_info = [wheel_data, wheel_events]
+    wheel_names = ["data", "events"]
+
+    for i in range(len(wheel_info)):
+        np.save(
+            filename + "_" + wheel_names[i] + ".npy",
+            wheel_info[i],
+            allow_pickle=True,
+        )
+
+
+def start_logging(
+    arg: dict[str, str, bool, bool, bool, bool],
+    data_types: list[str] | None = [
+        "instrumented_wheels",
+        "motion_capture",
+    ],
+    wheels: dict[NextWheel, NextWheel] | None = wheels,
+    IP: dict | None = {"right": "192.168.0.86", "left": "0.0.0.0"},
+) -> None:
+    """
+    Creates folders for this new session, in which trials will be saved.
+
+    Parameters
+    ----------
+    arg : dict[str, str, bool, bool, bool, bool]
         Dictionary containing arguments sent through Godot:
             "folder": str, the main folder where all data is saved.
-            "scene": str, the current selected playable scene.
             "participant": str, the current participant identifier.
             "player_position": bool, whether to save the player's position.
             "player_rotation": bool, whether to save the player's rotation.
             "instrumented_wheels": bool, whether to save the wheels.
             "motion_capture": bool,  whether to save the motion capture.
     data_types : list of str, optional
-        The different data types that can be selected for saving through the
-        Godot interface.
-        The default is ["player_position", "player_rotation",
-                        "instrumented_wheels", "motion_capture"].
+        The different data types selected for saving through the Godot interface
+        that are recorded in a single file for a session.
+        The default is ["instrumented_wheels", "motion_capture"].
+    wheel : NextWheel or None, optional
+        The instance of NextWheel created when data_logging.py is imported if
+        data from the instrumented wheels is to be recorded. If not, None
+
 
     Returns
     -------
     None
     """
     folder = make_folder(arg["folder"], arg["participant"])
+    session = get_session(folder)
+    session_folder = make_folder(
+        arg["folder"], arg["participant"], session=str(date.today())
+    )
+
+    if arg["instrumented_wheels"] == True:
+        for key in wheels.keys():
+            try:
+                wheels[key].IP = IP[key]
+                print("Successfully established connection to wheel: " + key)
+            except:
+                print("Connection could not be established to wheel: " + key)
+
+
+def wheels_load(trial_folder: str, filebase: str, wheel_type: str):
+    """
+    Loads an events or a data file pertaining to the recording of the
+    instrumented wheels during this session
+
+    Parameters
+    ----------
+    session_folder : str
+        The folder where data relating to the current session is saved.
+    filebase : str
+        The base filename for the events file to load, of the form:
+        SX_YYYY-MM-DD- where X is the session number.
+    wheel_type : str
+        The type of file to be loaded: either 'events' or 'data'.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+    """
+    wheel_dict = np.load(
+        os.path.join(trial_folder, filebase + "_" + wheel_type + ".npy"),
+        allow_pickle=True,
+    ).item()
+
+    return wheel_dict
+
+
+def wheels_event(trial_folder: str, wheel_file: str, event_name: str) -> None:
+    """
+    Opens the events file corresponding to this session, appends an event, and
+    saves and closes the file.
+
+    Parameters
+    ----------
+    session_folder : str
+        The folder where data relating to the current session is saved.
+    wheel_file : str
+        The base filename for the events file to load, of the form:
+        SX_YYYY-MM-DD- where X is the session number.
+    event_name : str
+        Name of the event to be logged. Conventions:
+            'start_logging' for logging initiation,
+            'TX_scene' for initiation of trial number X of scene name 'scene',
+            'stop_logging' for logging termination.
+
+    Returns
+    -------
+    None
+    """
+    wheel_events = wheels_load(trial_folder, wheel_file, "events")
+
+    wheel_events[event_name] = arg["time"]
+    print("Sent new scene event to NextWheel: " + event_name)
+    np.save(
+        os.path.join(trial_folder, wheel_file + "_events.npy"),
+        wheel_events,
+        allow_pickle=True,
+    )
+
+
+def create_trial(
+    arg: dict[str, str, str, str, bool, bool, bool, bool],
+    player_data: list[str] | None = ["player_position", "player_rotation"],
+) -> None:
+    """
+    Creates empty files where data will be saved during this current trial.
+
+    Parameters
+    ----------
+    arg : dict[str, str, str, bool, bool, bool, bool]
+        Dictionary containing arguments sent through Godot:
+            "folder": str, the main folder where all data is saved.
+            "participant": str, the current participant identifier.
+            "scene": str, the current selected playable scene.
+            "time": str, the current timestamp.
+            "player_position": bool, whether to save the player's position.
+            "player_rotation": bool, whether to save the player's rotation.
+            "instrumented_wheels": bool, whether to save the wheels.
+            "motion_capture": bool,  whether to save the motion capture.
+    player_data : list of str, optional
+        The different data types pertaining to the player that selected through
+        the Godot interface (saved per trial).
+        The default is ["player_position", "player_rotation"].
+
+    Returns
+    -------
+    None
+    """
+    folder = make_folder(arg["folder"], arg["participant"])
+    session = get_session(folder)
 
     session_folder = make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
     )
-    session = get_session(folder)
-    trial = get_trial(session_folder)
+    trial = str(int(get_trial(session_folder)) + 1)
 
     trial_folder = make_folder(
         arg["folder"],
@@ -263,14 +397,31 @@ def create_files(
         trial="T" + trial,
     )
 
-    data_to_save = [arg[data_types[i]] for i in range(len(data_types))]
+    for i in range(len(player_data)):
+        if arg[player_data[i]] == True:
+            filename = make_filename(
+                session, trial, arg["scene"], player_data[i]
+            )
+            header = make_header(player_data[i])
+            make_csv(trial_folder, filename, header)
+            print("Created the file " + filename)
 
-    filenames = make_filenames(session, trial, arg["scene"], data_to_save)
-    headers = make_headers(data_to_save)
-
-    for i in range(len(filenames)):
-        make_csv(trial_folder, filenames[i], headers[i])
-        print("Created the file " + filenames[i])
+    if arg["instrumented_wheels"] == True:
+        for key in wheels.keys():
+            wheels[key].start_streaming()
+        wheel_file = (
+            "S"
+            + str(session)
+            + "_"
+            + str(date.today())
+            + "_"
+            + "T"
+            + trial
+            + "_"
+            + arg["scene"]
+        )
+        wheel_dicts(os.path.join(trial_folder, wheel_file))
+        wheels_event(trial_folder, wheel_file, "stream_start")
 
 
 def find_files(
@@ -302,17 +453,9 @@ def find_files(
     if os.path.exists(folder):
         # setting up the data logging folder and participant name
         data_folder = os.path.join(
-            folder, participant, str(date.today()), trial
+            folder, participant, str(date.today()), "T" + trial
         )
-        files = glob.glob(os.path.join(data_folder, "*.csv"))
-        trials = [
-            int(file.split("\\")[-1].split("_T")[1].split("_")[0])
-            for file in files
-        ]
-        if len(trials) > 0:
-            trial = str(max(trials))
-        else:
-            trial = "0"
+
         trial_files = glob.glob(
             os.path.join(
                 data_folder, "*" + str(date.today()) + "_T" + trial + "*.csv"
@@ -361,10 +504,73 @@ def save_file(
         writer.writerow(data_line)
 
 
+def wheels_save(
+    session: str,
+    trial_folder: str,
+    scene: str,
+    trial: str,
+    wheels=wheels,
+    side: str | None = "right",
+) -> None:
+    """
+    Opens the data file corresponding to this session, appends data to it, and
+    saves and closes the file.
+
+    Parameters
+    ----------
+    session : str
+        Current session number.
+    session_folder : str
+        Current session folder.
+    wheel : NextWheel or None, optional
+        The instance of NextWheel created when data_logging.py is imported if
+        data from the instrumented wheels is to be recorded. If not, None
+
+    Returns
+    -------
+    None
+    """
+    wheel_file = (
+        "S"
+        + str(session)
+        + "_"
+        + str(date.today())
+        + "_T"
+        + trial
+        + "_"
+        + scene
+    )
+    wheel_data = wheels_load(trial_folder, wheel_file, "data")
+
+    nw = wheels[side].fetch(clear=True)
+    for key in nw.keys():
+        if len(wheel_data[key]["Time"]) == 0:
+            wheel_data[key]["Time"] = nw[key].time.reshape(-1, 1)
+        else:
+            wheel_data[key]["Time"] = np.vstack(
+                (wheel_data[key]["Time"], nw[key].time.reshape(-1, 1))
+            )
+
+        for subkey in nw[key].data.keys():
+            data = nw[key].data[subkey]
+            if len(nw[key].data[subkey].shape) == 1:
+                data = data.reshape(-1, 1)
+            if (len(wheel_data[key][subkey])) == 0:
+                wheel_data[key][subkey] = data
+            else:
+                wheel_data[key][subkey] = np.vstack(
+                    (wheel_data[key][subkey], data)
+                )
+
+    np.save(
+        os.path.join(trial_folder, wheel_file + "_data.npy"),
+        wheel_data,
+        allow_pickle=True,
+    )
+
+
 def save_data(
-    arg: dict[
-        str, str, str, str, str or None, str or None, str or None, str or None
-    ],
+    arg: dict[str, str, str, bool, str, str or None, str or None],
     data_types: list[str] | None = [
         "time",
         "position",
@@ -382,13 +588,12 @@ def save_data(
     arg : dict[str, str, str, str, str or None, str or None, str or None, str or None]
         Dictionary containing arguments sent through Godot:
             "folder": str, the main folder where all data is saved.
-            "scene": str, the current selected playable scene.
             "participant": str, the current participant identifier.
+            "scene": str, the current selected playable scene.
+            "instrumented_wheels": bool, whether to save the wheels.
             "time": str, the current Unix timestamp.
             "position": str or None, the position at current timestamp, if saved.
             "rotation": str or None, the rotation at current timestamp, if saved.
-            "wheels": str or None, the wheels at current timestamp, if saved.
-            "motion": str or None, the motion at current timestamp, if saved.
     data_types : list[str] | None, optional
         Time, and the different data types that can be selected for saving
         through the Godot interface.
@@ -398,18 +603,11 @@ def save_data(
     -------
     None
     """
-    trial = str(
-        int(
-            get_trial(
-                os.path.join(
-                    arg["folder"], arg["participant"], str(date.today())
-                )
-            )
-        )
-        - 1
+    trial = get_trial(
+        os.path.join(arg["folder"], arg["participant"], str(date.today()))
     )
     trial_files, trial_basename = find_files(
-        arg["folder"], arg["scene"], arg["participant"], "T" + trial
+        arg["folder"], arg["scene"], arg["participant"], trial
     )
     data_to_save = {key: arg[key] for key in data_types if key in arg}
 
@@ -423,29 +621,168 @@ def save_data(
                 list(data_to_save.values())[i + 1],
             )
 
+    if arg["instrumented_wheels"] == True:
+        session = get_session(os.path.join(arg["folder"], arg["participant"]))
+        trial_folder = make_folder(
+            arg["folder"],
+            arg["participant"],
+            session=str(date.today()),
+            trial="T" + trial,
+        )
+        wheels_save(session, trial_folder, arg["scene"], trial, side="right")
+
+
+def wheels_stop(
+    session: str,
+    trial_folder: str,
+    trial: str,
+    scene: str,
+    wheels=wheels,
+    side: str | None = "right",
+) -> None:
+    """
+    Stop the streaming of data from the instrumented wheels, catches final
+    events, and converts the numpy arrays saved inside of the data file to
+    TimeSeries instances before saving the final file to be used for analysis.
+
+    Parameters
+    ----------
+    session : str
+        Current session number.
+    session_folder : str
+        Current session folder.
+
+    Returns
+    -------
+    None
+    """
+    wheels[side].stop_streaming()
+
+    wheel_file = (
+        "S"
+        + str(session)
+        + "_"
+        + str(date.today())
+        + "_T"
+        + trial
+        + "_"
+        + scene
+    )
+
+    wheels_event(trial_folder, wheel_file, "stream_stop")
+
+    wheels_save(session, trial_folder, scene, trial, side="right")
+
+    wheel_events = wheels_load(trial_folder, wheel_file, "events")
+    wheel_data = wheels_load(trial_folder, wheel_file, "data")
+
+    for key in wheel_data.keys():
+        wheel_time = wheel_data[key]["Time"][:, 0]
+
+        wheel_data[key] = TimeSeries(time=wheel_time, data=wheel_data[key])
+
+        for subkey in wheel_events:
+            wheel_data[key].add_event(
+                time=float(wheel_events[subkey]), name=subkey, in_place=True
+            )
+
+    np.save(
+        os.path.join(trial_folder, wheel_file + ".npy"),
+        wheel_data,
+        allow_pickle=True,
+    )
+
+
+def end_logging(
+    arg: dict[str, str, str, str, bool, bool],
+) -> None:
+    """
+    Confirms the end of recording and, if the data is recorded through the
+    instrumented wheels, terminated the corresponding streaming.
+
+    Parameters
+    ----------
+    arg : dict[str, str, str, str, str or None, str or None, str or None, str or None]
+        Dictionary containing arguments sent through Godot:
+                "folder": str, the main folder where all data is saved.
+                "participant": str, the current participant identifier.
+                "scene": str, the current selected playable scene.
+                "time": str, the current Unix timestamp.
+                "instrumented_wheels": bool, whether to save the wheels.
+                "motion_capture": bool,  whether to save the motion capture.
+    wheel : NextWheel or None
+        Instance of NextWheel class if this data is to be saved, if not, None.
+
+    Returns
+    -------
+    None
+    """
+
+    folder = make_folder(arg["folder"], arg["participant"])
+    session = get_session(folder)
+    session_folder = make_folder(
+        arg["folder"], arg["participant"], session=str(date.today())
+    )
+    trial = get_trial(session_folder)
+    trial_folder = make_folder(
+        arg["folder"],
+        arg["participant"],
+        session=str(date.today()),
+        trial="T" + trial,
+    )
+
+    if arg["instrumented_wheels"] == True:
+        wheels_stop(session, trial_folder, trial, arg["scene"], side="right")
+
+    print("Logging is done for current session: ", trial_folder)
+
 
 if __name__ == "__main__":
+    import time
+
     arg = {
         "folder": r"D:\Maria_school\Documents\S2026\data",
-        "scene": "scene",
         "participant": "test",
-        "player_position": True,
-        "player_rotation": True,
-        "instrumented_wheels": False,
+        "time": "0000000000.000",
+        "instrumented_wheels": True,
         "motion_capture": False,
     }
-
-    create_files(arg)
+    start_logging(arg)
+    time.sleep(2)
 
     arg = {
         "folder": r"D:\Maria_school\Documents\S2026\data",
-        "scene": "scene",
         "participant": "test",
+        "scene": "scene",
+        "time": "0000000000.000",
+        "player_position": True,
+        "player_rotation": True,
+        "instrumented_wheels": True,
+        "motion_capture": False,
+    }
+    create_trial(arg)
+    time.sleep(2)
+
+    arg = {
+        "folder": r"D:\Maria_school\Documents\S2026\data",
+        "participant": "test",
+        "scene": "scene",
+        "instrumented_wheels": True,
         "time": "0000000000.000",
         "position": "(0,0,0)",
         "rotation": "(0,0,0)",
-        "wheels": None,
-        "motion": None,
     }
 
-    save_data(arg)
+    for i in range(3):
+        save_data(arg)
+        time.sleep(2)
+
+    arg = {
+        "folder": r"D:\Maria_school\Documents\S2026\data",
+        "participant": "test",
+        "scene": "scene",
+        "time": "0000000000.000",
+        "instrumented_wheels": True,
+        "motion_capture": False,
+    }
+    end_logging(arg)

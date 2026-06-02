@@ -644,7 +644,7 @@ def init_results():
         "cycles": {"left": [],"right": []},
         "new_cycle_log": {"left": 1,"right": 1},
         "new_cycle_send": {"left": 3,"right": 3},
-        "ts_full": None,
+        "ts_full": {"left": None,"right": None},
         }
 
     return results

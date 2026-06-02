@@ -50,8 +50,10 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
-    "create_file": data_logging.create_files,
+    "start_logging": data_logging.start_logging,
+    "create_trial": data_logging.create_trial,
     "data_logging": data_logging.save_data,
+    "end_logging": data_logging.end_logging,
 }
 
 

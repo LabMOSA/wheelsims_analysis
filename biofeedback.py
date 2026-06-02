@@ -12,7 +12,7 @@ results = {
     "cycles": {"left": [],"right": []},
     "new_cycle_log": {"left": 1,"right": 1},
     "new_cycle_send": {"left": 3,"right": 3},
-    "ts_full": None,
+    "ts_full": {"left": None,"right": None},
     }
 
     
@@ -29,17 +29,13 @@ def biofeedback_stop(arg):
         # Reconstructs the global session dataset (limit_duration=0) and injects
         # the complete accumulated cycle history for both sides.
         
-        data_cycles = analyze_current_window(results["data"], arg, {"left": [],"right": []}, limit_duration=0)
-        data_cycles["left"]["cycles"] = results["cycles"]["left"]
-        data_cycles["right"]["cycles"] = results["cycles"]["right"]
+        plot_sides_kinematics(results)
 
-        plot_sides_kinematics(data_cycles)
+        plot_side_kinematics(results, "left")
+        plot_side_kinematics(results, "right")
 
-        plot_side_kinematics(data_cycles, "left")
-        plot_side_kinematics(data_cycles, "right")
-
-        plot_side_push_pattern(arg, data_cycles, "left")
-        plot_side_push_pattern(arg, data_cycles, "right")
+        plot_side_push_pattern(arg, results, "left")
+        plot_side_push_pattern(arg, results, "right")
 
     except Exception as e:
         print(f"Display full kinematics and push pattern : {e}")
@@ -93,6 +89,32 @@ def biofeedback_update(arg):
         except Exception as e:
             print(f"update_data_cycles : {e}")
         return cycles
+
+    def update_ts_full(ts_full, current_window_data):
+        """
+        Updates the global timeserie of Meta2 with newly detected timeserie.
+        """
+
+        try:
+            for side in ["left", "right"]:
+        
+                ts = current_window_data[side]["ts"]
+                
+                # If history timeserie is empty for this side, safely get the first timeserie
+                if ts_full[side] is None:
+                    ts_full[side] = ts
+                else:
+                    # Cut the timeserie to merge after the previous one ended
+                    ts_to_merge = ts.get_ts_after_time(ts_full[side].time[-1], inclusive = False)
+        
+                    ts_full[side].time = np.concatenate([ts_full[side].time, ts_to_merge.time])
+                    
+                    for key in ts_full[side].data:
+                        ts_full[side].data[key] = np.concatenate([ts_full[side].data[key], ts_to_merge.data[key]], axis=0)
+
+        except Exception as e:
+            print(f"update_ts_full : {e}")
+        return ts_full
 
     def send_data_godot(new_cycle_send, cycles):
         """
@@ -148,7 +170,7 @@ def biofeedback_update(arg):
                         f" : Push n°{len(cycles[side]):<3} | "
                         f"Time execution: {fin - debut:<8.6f} s | "
                         f"Time data windowed: {duration_cycle_analized:<4.2f} s | "
-                        f"Push frequency: {push_frequency:<4.2f} Hz | "
+                        f"Push frequency: {push_frequency:<4.2f} Pushes per second | "
                         # f"Push pattern: {push_pattern}"
                     )
 
@@ -185,6 +207,8 @@ def biofeedback_update(arg):
         
         results["current_window_data"] = analyze_current_window(results["data"], arg, results["cycles"], limit_duration=5)
         results["cycles"] = update_data_cycles(results["cycles"], results["current_window_data"])
+        results["ts_full"] = update_ts_full(results["ts_full"], results["current_window_data"])
+        
         
         results["new_cycle_send"] = send_data_godot(results["new_cycle_send"], results["cycles"])
         
@@ -488,7 +512,7 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
     return current_window_data
 
 
-def plot_sides_kinematics(data_cycles):
+def plot_sides_kinematics(results):
     """
     Plot Position for both side
     """
@@ -504,7 +528,7 @@ def plot_sides_kinematics(data_cycles):
         plt.title("Position")
         colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
 
-        for i, cycle in enumerate(data_cycles[side]["cycles"]):
+        for i, cycle in enumerate(results["cycles"][side]):
             start = cycle["in_push"]["time"]
             end = cycle["end_push"]["time"]
             color = colors[i % 2]
@@ -512,8 +536,8 @@ def plot_sides_kinematics(data_cycles):
             plt.axvspan(start, end, color=color, alpha=0.3)
 
         plt.plot(
-            data_cycles[side]["ts"].time,
-            data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0],
+            results["ts_full"][side].time,
+            results["ts_full"][side].data[f"Meta2{side}"][:, 0],
             label=f"Meta2{side}",
         )
         plt.xlabel("Time (s)")
@@ -521,7 +545,7 @@ def plot_sides_kinematics(data_cycles):
 
         plt.tight_layout()
 
-def plot_side_kinematics(data_cycles, side):
+def plot_side_kinematics(results, side):
     """
     Plot Position, velocity and acceleration for a single side
     """
@@ -531,7 +555,7 @@ def plot_side_kinematics(data_cycles, side):
     plt.title("Position")
     colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
 
-    for i, cycle in enumerate(data_cycles[side]["cycles"]):
+    for i, cycle in enumerate(results["cycles"][side]):
         start = cycle["in_push"]["time"]
         end = cycle["end_push"]["time"]
         color = colors[i % 2]
@@ -539,28 +563,28 @@ def plot_side_kinematics(data_cycles, side):
         plt.axvspan(start, end, color=color, alpha=0.3)
 
     plt.plot(
-        data_cycles[side]["ts"].time,
-        data_cycles[side]["ts"].data[f"Meta2{side}"][:, 0],
+        results["ts_full"][side].time,
+        results["ts_full"][side].data[f"Meta2{side}"][:, 0],
         label=f"Meta2{side}",
     )
     plt.xlabel("Time (s)")
     plt.legend()
     plt.subplot(3, 1, 2)
     plt.title("Velocity")
-    data_cycles[side]["ts"].plot(f"Meta2{side}_df")
+    results["ts_full"][side].plot(f"Meta2{side}_df")
     plt.subplot(3, 1, 3)
     plt.title("Acceleration")
-    data_cycles[side]["ts"].plot(f"Meta2{side}_dff")
+    results["ts_full"][side].plot(f"Meta2{side}_dff")
 
     plt.tight_layout()
 
-def plot_side_push_pattern(arg, data_cycles, side):
+def plot_side_push_pattern(arg, results, side):
     """
     Plot push pattern for a single side
     """
 
 
-    cycles = data_cycles[side]["cycles"]
+    cycles = results["cycles"][side]
     num_cycles = len(cycles)
 
     if num_cycles == 0:
@@ -598,7 +622,7 @@ def plot_side_push_pattern(arg, data_cycles, side):
             )
             ax.add_patch(circle)
 
-            ts = data_cycles[side]["ts"].get_ts_between_times(
+            ts = results["ts_full"][side].get_ts_between_times(
                 cycle["in_push"]["time"], cycle["end_push"]["time"]
             )
             ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])

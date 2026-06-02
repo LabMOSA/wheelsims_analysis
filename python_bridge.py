@@ -25,7 +25,7 @@ import socket
 import json
 import time
 import biofeedback
-import data_logging
+import os
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -50,10 +50,6 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
-    "start_logging": data_logging.start_logging,
-    "create_trial": data_logging.create_trial,
-    "data_logging": data_logging.save_data,
-    "end_logging": data_logging.end_logging,
 }
 
 
@@ -71,11 +67,17 @@ def _init_udp_socket():
         _private_vars["sock"].bind((UDP_IP, PYTHON_PORT))
 
 
-def send_data(data):
+def send_data(command, data):
     """Encode data to JSON and send it via UDP."""
     _init_udp_socket()
-    message = json.dumps(data).encode("utf-8")
-    _private_vars["sock"].sendto(message, (UDP_IP, GODOT_PORT))
+    
+    message = {
+        "command": command, 
+        "data": data
+    }
+ 
+    json_message = json.dumps(message).encode("utf-8")
+    _private_vars["sock"].sendto(json_message, (UDP_IP, GODOT_PORT))
 
 
 if __name__ == "__main__":
@@ -85,7 +87,7 @@ if __name__ == "__main__":
     # Sending ping request, availables functions to Godot for debug scene
     print("Python connected to Godot...\n")
     time.sleep(1)
-    send_data(list(COMMAND_MAPPING.keys()))
+    send_data("ping", list(COMMAND_MAPPING.keys()))
 
     time.sleep(1)
 
@@ -122,6 +124,9 @@ if __name__ == "__main__":
                 break
             except ConnectionResetError:
                 break
+        
+        # Do not execute repeating commands after shutdown request
+        if not _private_vars["is_running"]: break
 
         # Execute every repeating command
         for command in _running_commands:
@@ -129,3 +134,4 @@ if __name__ == "__main__":
 
     # Quit
     _private_vars["sock"].close()
+    os._exit(0)

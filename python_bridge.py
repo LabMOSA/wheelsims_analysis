@@ -26,6 +26,7 @@ import json
 import time
 import biofeedback
 import os
+import data_logging
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -50,6 +51,10 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
+    "start_logging": data_logging.start_logging,
+    "create_trial": data_logging.create_trial,
+    "data_logging": data_logging.save_data,
+    "end_logging": data_logging.end_logging,
 }
 
 
@@ -70,12 +75,9 @@ def _init_udp_socket():
 def send_data(command, data):
     """Encode data to JSON and send it via UDP."""
     _init_udp_socket()
-    
-    message = {
-        "command": command, 
-        "data": data
-    }
- 
+
+    message = {"command": command, "data": data}
+
     json_message = json.dumps(message).encode("utf-8")
     _private_vars["sock"].sendto(json_message, (UDP_IP, GODOT_PORT))
 
@@ -124,9 +126,10 @@ if __name__ == "__main__":
                 break
             except ConnectionResetError:
                 break
-        
+
         # Do not execute repeating commands after shutdown request
-        if not _private_vars["is_running"]: break
+        if not _private_vars["is_running"]:
+            break
 
         # Execute every repeating command
         for command in _running_commands:

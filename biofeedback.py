@@ -432,7 +432,7 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
 
         cycles = filtered_1
 
-        # Kinematic criterion #2: condition to cross the midpoint between the overall most anterior and posterior positions of the last 3 cycles
+        # Kinematic criterion #2: condition to cross the mean anterior-posterior position computed over the last 3 seconds
         filtered_2 = []
         signal = pos_x
 
@@ -440,26 +440,13 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             if len(prev_data_cycles) < 3:
                 filtered_2.append(cycles[r])
                 continue
-
-            prev_values = [
-                (
-                    prev_data_cycles[-1]["recovery"]["value"]
-                    + prev_data_cycles[-1]["in_push"]["value"]
-                )
-                / 2,
-                (
-                    prev_data_cycles[-2]["recovery"]["value"]
-                    + prev_data_cycles[-2]["in_push"]["value"]
-                )
-                / 2,
-                (
-                    prev_data_cycles[-3]["recovery"]["value"]
-                    + prev_data_cycles[-3]["in_push"]["value"]
-                )
-                / 2,
-            ]
-
-            median_val = sorted(prev_values)[1]
+            
+            duration_ts = ts.time[-1] - ts.time[0]
+            
+            if duration_ts >= 3:
+                mean_value = ts.get_ts_after_time(ts.time[-1] - 3).data[f"Meta2{side}"][:, 0].mean()
+            else:
+                mean_value = ts.data[f"Meta2{side}"][:, 0].mean()
 
             t0 = ts.get_index_at_time(cycles[r]["in_push"]["time"])
             t2 = ts.get_index_at_time(cycles[r]["end_push"]["time"])
@@ -470,9 +457,9 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             crossed_down = False
 
             for i in range(len(segment) - 1):
-                if segment[i] < median_val and segment[i + 1] >= median_val:
+                if segment[i] < mean_value and segment[i + 1] >= mean_value:
                     crossed_up = True
-                if segment[i] > median_val and segment[i + 1] <= median_val:
+                if segment[i] > mean_value and segment[i + 1] <= mean_value:
                     crossed_down = True
 
                 if crossed_up and crossed_down:

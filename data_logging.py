@@ -152,7 +152,7 @@ def _find_files(
 
 
 def _make_header(
-    trajectory_type: str,
+    trajectory_data: list[str] | None = ["position", "rotation"],
     data_column: int | None = 4,
 ) -> list[list[str]]:
     """
@@ -160,11 +160,11 @@ def _make_header(
 
     Parameters
     ----------
-    trajectory_type :
-        The data type to be saved through the Godot interface.
-        The options are ["position", "rotation"].
+    trajectory_data : optional
+        The two data types to be saved through the Godot interface.
+        The default is ["position", "rotation"].
     data_columns : optional
-        The number of columns to be expected for the file to be saved.
+        The number of columns to be expected for each trajectory data to save
         The default is 4.
 
     Returns
@@ -173,17 +173,14 @@ def _make_header(
         Header corresponding to the file to be created.
     """
     header = ["time"] + [
-        trajectory_type + "[:," + str(j) + "]" for j in range(data_column)
+        trajectory_data[i] + "[:," + str(j) + "]"
+        for i in range(len(trajectory_data))
+        for j in range(data_column)
     ]
     return header
 
 
-def _make_filename(
-    session: str,
-    trial: str,
-    scene: str,
-    trajectory_type: str,
-) -> list[str]:
+def _make_filename(session: str, trial: str, scene: str) -> list[str]:
     """
     Create a filename appropriate for the trajectory data to be saved.
 
@@ -195,9 +192,6 @@ def _make_filename(
         Current trial number.
     scene :
         Current playable scene selected (out of 6 options).
-    trajectory_type :
-        The data type to be saved through the Godot interface.
-        The options are ["position", "rotation"].
 
     Returns
     -------
@@ -214,9 +208,7 @@ def _make_filename(
         + trial
         + "_"
         + scene
-        + "_"
-        + trajectory_type
-        + ".csv"
+        + "_trajectory.csv"
     )
 
     return file
@@ -343,9 +335,7 @@ def _load_wheels(
 # %% Logging simulator
 
 
-def _save_trajectory(
-    base: str, timestamp: str, trajectory_type: str, data_values: str
-) -> None:
+def _save_trajectory(base: str, data_values: dict[str, str]) -> None:
     """
     Open and append data to an already-created CSV file containing trajectory.
 
@@ -353,10 +343,6 @@ def _save_trajectory(
     ----------
     base :
         Current participant's data sub-folder.
-    timestamp :
-        Current timestamp to save.
-    trajectory_type :
-        Current data type to save.
     data_values :
         Current data values to save.
 
@@ -364,15 +350,17 @@ def _save_trajectory(
     -------
     None
     """
-    filename = base + trajectory_type + ".csv"
+    filename = base + "trajectory.csv"
 
-    data_line = [timestamp] + [x for x in data_values.strip("()").split(",")]
+    timestamp = data_values["time"]
 
-    # add appropriate values for last column
-    if trajectory_type == "position":
-        data_line.append("1")
-    elif trajectory_type == "rotation":
-        data_line.append("0")
+    data_line = (
+        [timestamp]
+        + [x for x in data_values["position"].strip("()").split(",")]
+        + ["1"]
+        + [x for x in data_values["rotation"].strip("()").split(",")]
+        + ["0"]
+    )
 
     with open(filename, "a", newline="") as file:
         writer = csv.writer(file)
@@ -609,8 +597,7 @@ def start_log(
         Dictionary containing arguments sent through Godot:
             "folder": str, the main folder where all data is saved.
             "participant": str, the current participant identifier.
-            "player_position": bool, whether to save the player's position.
-            "player_rotation": bool, whether to save the player's rotation.
+            "player_trajectory": bool, whether to save the player's trajectory.
             "instrumented_wheels": bool, whether to save the wheels.
             "motion_capture": bool,  whether to save the motion capture.
     data_types : optional
@@ -645,13 +632,7 @@ def start_log(
                 print("Connection could not be established to wheel: " + key)
 
 
-def create_trial(
-    arg: dict[str, str | bool],
-    player_data: list[str] | None = [
-        "player_position",
-        "player_rotation",
-    ],
-) -> None:
+def create_trial(arg: dict[str, str | bool]) -> None:
     """
     Create empty files where data will be saved during this current trial.
 
@@ -663,14 +644,9 @@ def create_trial(
             "participant": str, the current participant identifier.
             "scene": str, the current selected playable scene.
             "time": str, the current timestamp.
-            "player_position": bool, whether to save the player's position.
-            "player_rotation": bool, whether to save the player's rotation.
+            "player_trajectory": bool, whether to save the player's position.
             "instrumented_wheels": bool, whether to save the wheels.
             "motion_capture": bool,  whether to save the motion capture.
-    player_data : optional
-        The different data types pertaining to the player that selected through
-        the Godot interface (saved per trial).
-        The default is ["player_position", "player_rotation"].
 
     Returns
     -------
@@ -691,14 +667,11 @@ def create_trial(
         trial="T" + trial,
     )
 
-    for i in range(len(player_data)):
-        if arg[player_data[i]] == True:
-            filename = _make_filename(
-                str(session), trial, arg["scene"], player_data[i]
-            )
-            header = _make_header(player_data[i])
-            _make_csv(trial_folder, filename, header)
-            print("Created the file " + filename)
+    if arg["player_trajectory"] == True:
+        filename = _make_filename(str(session), trial, arg["scene"])
+        header = _make_header()
+        _make_csv(trial_folder, filename, header)
+        print("Created the file " + filename)
 
     if arg["instrumented_wheels"] == True:
         for key in wheels.keys():
@@ -722,13 +695,7 @@ def create_trial(
 
 def save_data(
     arg: dict[str, str | bool],
-    data_types: list[str] | None = [
-        "time",
-        "position",
-        "rotation",
-        "wheels",
-        "motion",
-    ],
+    trajectory: list[str] | None = ["time", "position", "rotation"],
 ) -> None:
     """
     Open and append new data line to trajectory and instrumented wheels files.
@@ -744,10 +711,9 @@ def save_data(
             "time": str, the current Unix timestamp.
             "position": str, the position at current timestamp, if saved.
             "rotation": str, the rotation at current timestamp, if saved.
-    data_types : optional
-        Time, and the different data types that can be selected for saving
-        through the Godot interface.
-        The default is ["time", "position", "rotation", "wheels", "motion"].
+    trajectory : optional
+        The different data types related to the trajectory to be saved.
+        The default is ["time", "position", "rotation"].
 
     Returns
     -------
@@ -759,17 +725,12 @@ def save_data(
     trial_files, trial_basename = _find_files(
         arg["folder"], arg["scene"], arg["participant"], str(trial)
     )
-    data_to_save = {key: arg[key] for key in data_types if key in arg}
+    trajectory_data = {key: arg[key] for key in trajectory if key in arg}
 
-    for i in range(len(data_to_save) - 1):
-        # only save if data was received
-        if (list(data_to_save.values())[i + 1]) is not None:
-            _save_trajectory(
-                trial_basename,
-                data_to_save["time"],
-                list(data_to_save.keys())[i + 1],
-                list(data_to_save.values())[i + 1],
-            )
+    if (trajectory_data[trajectory[1]] is not None) or (
+        trajectory_data[trajectory[2]] is not None
+    ):
+        _save_trajectory(trial_basename, trajectory_data)
 
     if arg["instrumented_wheels"] == True:
         session = _get_session(os.path.join(arg["folder"], arg["participant"]))
@@ -863,8 +824,7 @@ if __name__ == "__main__":
         "participant": "test",
         "scene": "scene",
         "time": "0000000000.000",
-        "player_position": True,
-        "player_rotation": True,
+        "player_trajectory": True,
         "instrumented_wheels": False,
         "motion_capture": False,
     }

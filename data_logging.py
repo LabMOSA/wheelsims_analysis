@@ -1,7 +1,3 @@
-import sys
-
-sys.path.append(r"D:\Maria_school\Documents\S2026\nextwheel\software\python")
-
 import os
 from datetime import date
 import csv
@@ -9,7 +5,7 @@ import glob
 from kineticstoolkit import TimeSeries
 import numpy as np
 
-from nextwheel import NextWheel
+from nextwheel.software.python.nextwheel import NextWheel
 
 wheels = {
     "right": NextWheel(),
@@ -633,6 +629,7 @@ def start_log(
     _ = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
     )
+    print("starting to log...")
 
     if arg["instrumented_wheels"] == True:
         for key in wheels.keys():

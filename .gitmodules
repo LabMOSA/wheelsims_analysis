@@ -1,0 +1,3 @@
+[submodule "nextwheel"]
+	path = nextwheel
+	url = https://github.com/LabMOSA/NextWheel.git

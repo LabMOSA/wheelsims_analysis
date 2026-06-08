@@ -41,9 +41,6 @@ frame_limit = 10000
 _data = {}
 ts = {}
 
-# Initial system time (to calculate time stamps relative to import time)
-_initial_system_time = time.time()
-
 # Global variable for the NatNet client
 _streaming_client = NatNetClient()
 
@@ -68,21 +65,21 @@ def receive_rigid_body_frame(
     None
 
     """
-    # Calculate elapsed time since the first frame
-    relative_time = time.time() - _initial_system_time
+    # Get UNIX TimeStamps for the absolute_time
+    absolute_time = time.time()
 
     if new_id not in _data:
         _data[new_id] = {"_positions": [], "_orientations": [], "_times": []}
 
     if len(_data[new_id]["_times"]) > 0:
         last_time = _data[new_id]["_times"][-1]
-        if relative_time <= last_time:
-            relative_time = last_time + 1e-6
+        if absolute_time <= last_time:
+            absolute_time = last_time + 1e-6
 
     # Add position, orientation and timestamp
     _data[new_id]["_positions"].append(np.append(position, 1.0))
     _data[new_id]["_orientations"].append(np.append(orientation, 1.0))
-    _data[new_id]["_times"].append(relative_time)
+    _data[new_id]["_times"].append(absolute_time)
 
     # If frame count exceeds limit, remove oldest frames
     if len(_data[new_id]["_positions"]) > frame_limit:

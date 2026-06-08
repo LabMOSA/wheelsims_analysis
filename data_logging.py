@@ -286,7 +286,7 @@ def _create_wheels(
         allow_pickle=True,
     )
 
-    for key in wheels.keys:
+    for key in wheels.keys():
         np.save(
             filename + "_data_" + key + ".npy",
             wheel_data,
@@ -370,7 +370,9 @@ def _save_trajectory(base: str, data_values: dict[str, str]) -> None:
 # %% Logging instrumented wheels
 
 
-def _event_wheels(trial_folder: str, wheel_file: str, event_name: str) -> None:
+def _event_wheels(
+    trial_folder: str, wheel_file: str, event_name: str, time: str
+) -> None:
     """
     Open and append event to instrumented wheels event dictionary.
 
@@ -386,6 +388,8 @@ def _event_wheels(trial_folder: str, wheel_file: str, event_name: str) -> None:
             'start_logging' for logging initiation,
             'TX_scene' for initiation of trial number X of scene name 'scene',
             'stop_logging' for logging termination.
+    time:
+        Time of the event to be logged
 
     Returns
     -------
@@ -393,7 +397,7 @@ def _event_wheels(trial_folder: str, wheel_file: str, event_name: str) -> None:
     """
     wheel_events = _load_wheels(trial_folder, wheel_file, "events")
 
-    wheel_events[event_name] = arg["time"]
+    wheel_events[event_name] = time
     print("Sent new scene event to NextWheel: " + event_name)
     np.save(
         os.path.join(trial_folder, wheel_file + "_events.npy"),
@@ -450,6 +454,7 @@ def _save_wheels(
     )
 
     nw = wheels[side].fetch(clear=True)
+
     for key in nw.keys():
         if len(wheel_data[key]["Time"]) == 0:
             wheel_data[key]["Time"] = nw[key].time.reshape(-1, 1)
@@ -460,17 +465,20 @@ def _save_wheels(
 
         for subkey in nw[key].data.keys():
             data = nw[key].data[subkey]
-            if len(nw[key].data[subkey].shape) == 1:
-                data = data.reshape(-1, 1)
-            if (len(wheel_data[key][subkey])) == 0:
-                wheel_data[key][subkey] = data
-            else:
-                wheel_data[key][subkey] = np.vstack(
-                    (wheel_data[key][subkey], data)
-                )
+
+            if data.shape[0] > 0:
+                if len(data.shape) == 1:
+                    data = data.reshape(-1, 1)
+
+                if (len(wheel_data[key][subkey])) == 0:
+                    wheel_data[key][subkey] = data
+                else:
+                    wheel_data[key][subkey] = np.vstack(
+                        (wheel_data[key][subkey], data)
+                    )
 
     np.save(
-        os.path.join(trial_folder, wheel_file + "_data.npy"),
+        os.path.join(trial_folder, wheel_file + "_data_" + side + ".npy"),
         wheel_data,
         allow_pickle=True,
     )
@@ -481,6 +489,7 @@ def _stop_wheels(
     trial_folder: str,
     trial: str,
     scene: str,
+    time: str,
     wheels: NextWheel | None = wheels,
 ) -> None:
     """
@@ -497,6 +506,8 @@ def _stop_wheels(
         The current trial number.
     scene :
         The current scene.
+    time :
+        The current timestamp.
     wheels : optional
         The two instances of NextWheel created (corresponding to the right and
         the left wheels) when data_logging is imported.
@@ -519,12 +530,12 @@ def _stop_wheels(
         + scene
     )
 
-    _event_wheels(trial_folder, wheel_file, "stream_stop")
+    _event_wheels(trial_folder, wheel_file, "stream_stop", time)
 
     for key in wheels.keys():
         wheels[key].stop_streaming()
         _save_wheels(session, trial_folder, scene, trial, side=key)
-        print("Successfully stopped stream from wheel: " + key)
+        print("Successfully stopped stream from wheel: " + wheels[key].IP)
 
     return wheel_file
 
@@ -627,9 +638,15 @@ def start_log(
         for key in wheels.keys():
             try:
                 wheels[key].IP = IP[key]
-                print("Successfully established connection to wheel: " + key)
+                print(
+                    "Successfully established connection to wheel: "
+                    + wheels[key].IP
+                )
             except:
-                print("Connection could not be established to wheel: " + key)
+                print(
+                    "Connection could not be established to wheel: "
+                    + wheels[key].IP
+                )
 
 
 def create_trial(arg: dict[str, str | bool]) -> None:
@@ -676,6 +693,7 @@ def create_trial(arg: dict[str, str | bool]) -> None:
     if arg["instrumented_wheels"] == True:
         for key in wheels.keys():
             wheels[key].start_streaming()
+            print("Streaming started for wheel: " + wheels[key].IP)
 
         wheel_file = (
             "S"
@@ -690,7 +708,7 @@ def create_trial(arg: dict[str, str | bool]) -> None:
         )
 
         _create_wheels(os.path.join(trial_folder, wheel_file))
-        _event_wheels(trial_folder, wheel_file, "stream_start")
+        _event_wheels(trial_folder, wheel_file, "stream_start", arg["time"])
 
 
 def save_data(
@@ -793,16 +811,12 @@ def end_log(
             trial_folder,
             str(trial),
             arg["scene"],
-            side="right",
+            arg["time"],
             wheels=wheels,
         )
         _convert_wheels(
             wheel_file,
-            str(session),
             trial_folder,
-            str(trial),
-            arg["scene"],
-            side="right",
             wheels=wheels,
         )
 

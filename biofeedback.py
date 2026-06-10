@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import optitrack as ot
-
+from matplotlib.patches import Rectangle, Polygon as MplPolygon
 
 results = {
     "run_mode": "stop",
@@ -31,17 +31,16 @@ def biofeedback_stop(arg):
         
         plot_sides_kinematics(results)
 
-        plot_side_kinematics(results, "left")
-        plot_side_kinematics(results, "right")
-
         plot_side_push_pattern(arg, results, "left")
         plot_side_push_pattern(arg, results, "right")
 
     except Exception as e:
         print(f"Display full kinematics and push pattern : {e}")
     
-    results.clear()    
-    results.update(init_results())
+    # ktk.save("results", results)
+    
+    # results.clear()    
+    # results.update(init_results())
 
     ot.stop()
     ot.clear()
@@ -161,17 +160,17 @@ def biofeedback_update(arg):
                 if len(cycles[side]) == new_cycle_log[side]:
 
                     push_frequency = cycles[side][-1]["push_frequency"]
-                    push_pattern = cycles[side][-1]["normalised_push_pattern"][-1]
+                    label_push_pattern = cycles[side][-1]["label_push_pattern"]
 
                     duration_cycle_analized = current_window_data[side]["ts"].time[-1] - current_window_data[side]["ts"].time[0]
 
                     print(
                         f"{f'{side}':<8} "
                         f" : Push n°{len(cycles[side]):<3} | "
-                        f"Time execution: {fin - debut:<8.6f} s | "
+                        f"Time execution: {end - start:<8.6f} s | "
                         f"Time data windowed: {duration_cycle_analized:<4.2f} s | "
                         f"Push frequency: {push_frequency:<4.2f} Pushes per second | "
-                        # f"Push pattern: {push_pattern}"
+                        f"Push pattern: {label_push_pattern}"
                     )
 
                     new_cycle_log[side] += 1
@@ -193,7 +192,7 @@ def biofeedback_update(arg):
     
     elif results["run_mode"] == "start":
     
-        debut = time.time()
+        start = time.time()
     
         try:
             results["data"] = ot.fetch()
@@ -203,7 +202,7 @@ def biofeedback_update(arg):
         if not results["data"]:
             return
 
-        fin = time.time()
+        end = time.time()
         
         results["current_window_data"] = analyze_current_window(results["data"], arg, results["cycles"], limit_duration=5)
         results["cycles"] = update_data_cycles(results["cycles"], results["current_window_data"])
@@ -334,7 +333,138 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
         """
         Detects voluntary propulsion cycles from position time series based on kinematic and temporal criteria
         """
+        
+        def classify_push_pattern(ts, cycles, side, arg):
+            
+            def compute_geometric_zones(recovery_phase, push_phase):
+                """
+                Compute signed areas between recovery and push trajectories by
+                segmenting the signal at curve crossings.
+                """
+                recovery = np.array(recovery_phase)
+                push = np.array(push_phase)
+                
+                # Sort push curve by anteroposterior for interpolation
+                push_sorted = push[np.argsort(push[:, 0])]
+                
+                y_push_interpolated = np.interp(
+                    recovery[:, 0], 
+                    push_sorted[:, 0], 
+                    push_sorted[:, 1]
+                    )
+                
+                # Mask to detect if the hand in the recovery crosses the push line
+                above = recovery[:, 1] >= y_push_interpolated
+                
+                # Ensure last segment is closed
+                extended_mask = np.append(above, not above[-1])
+                        
+                areas = []
+                start_idx = 0
+                current_sign = above[0]
+                
+                for i in range(1, len(extended_mask)):
 
+                    if extended_mask[i] != current_sign:
+
+                        current_recovery_phase = recovery[start_idx:i+1]
+                        current_push_phase = np.column_stack((recovery[start_idx:i+1, 0], y_push_interpolated[start_idx:i+1]))
+                        
+                        # Calculating geometric area using the trapezoidal rule
+                        dx = current_recovery_phase[1:, 0] - current_recovery_phase[:-1, 0]
+                        mean_recovery_y = (current_recovery_phase[1:, 1] + current_recovery_phase[:-1, 1]) / 2.0
+                        mean_push_y = (current_push_phase[1:, 1] + current_push_phase[:-1, 1]) / 2.0
+                        
+                        area = np.sum((mean_recovery_y  - mean_push_y) * dx)
+                        
+                        areas.append({
+                            "sign": "positive" if current_sign else "negative",
+                            "area": abs(area),
+                            "recovery_phase": current_recovery_phase,
+                            "push_phase": current_push_phase
+                        })
+                        
+                        start_idx = i
+                        current_sign = extended_mask[i]
+                    
+                return areas
+                
+            def compute_A1(deviation_max, recovery_phase, push_phase, side, arg):
+                """
+                Normalized index of recovery-phase deviation relative to push-phase radius.
+
+                A1 compares the hand deviation during recovery to a reference
+                threshold (d_max). Values > 1 indicate large deviation.
+                """
+                
+                push_distances = np.sqrt((push_phase[:, 0] - arg[f"coordinates_{side}_wheel_center"][0])**2 + (push_phase[:, 1] - arg[f"coordinates_{side}_wheel_center"][1])**2)
+                distance_hand_wheel_center = np.sqrt((recovery_phase[:, 0] - arg[f"coordinates_{side}_wheel_center"][0])**2 + (recovery_phase[:, 1] - arg[f"coordinates_{side}_wheel_center"][1])**2)
+                
+                min_push_distance = np.min(push_distances)
+                deviation = np.sort(np.abs(distance_hand_wheel_center - min_push_distance))
+            
+                # Median of the upper quartile (75–100%)
+                mean_distance_deviation = np.median(deviation[int(len(deviation) * 0.75):])
+                
+                A1 = mean_distance_deviation / deviation_max
+                
+                return A1
+                
+            def compute_A2(zones_detectees):
+                """
+                Symmetry index based on signed areas.
+            
+                A2 = (positive areas - negative areas) / total areas
+                Range: [-1, 1]
+                    +1 --> positive dominance
+                    -1 --> negative dominance
+                """
+                
+                Ap = 0
+                An = 0
+                
+                for zone in zones_detectees:
+                    if zone["sign"] == "positive":
+                        Ap += zone["area"]
+                    if zone["sign"] == "negative":
+                        An += zone["area"]
+                        
+                A2 = (Ap - An)/(Ap + An)
+                
+                return A2
+
+            def classify_stroke_pattern(A1, A2):
+                """
+                Classify propulsion pattern from A1 and A2.
+                """
+                
+                if A1 < 1:
+                    return "Pumping (PM)"
+                elif A2 <= -0.75:
+                    return "Semi-Circular (SC)"
+                elif A2 >=  0.75:
+                    return "Single-Loop (SLOP)"
+                elif A2 < 0.75 and A2 > -0.75:
+                    return "Double-Loop (DLOP)"
+                else:
+                    return ""
+
+            # Split the time-series cycle into recovery and push phases    
+            recovery_phase = ts.get_ts_between_times(cycles["recovery"]["time"], cycles["end_push"]["time"]).data[f"Meta2{side}"][:, 0:2]
+            push_phase = ts.get_ts_between_times(cycles["in_push"]["time"], cycles["recovery"]["time"]).data[f"Meta2{side}"][:, 0:2]
+            
+            # Compute A1 and A2 criteria
+            areas = compute_geometric_zones(recovery_phase, push_phase)
+        
+            A1 = compute_A1(0.06, recovery_phase, push_phase, side, arg)
+            A2 = compute_A2(areas)
+            
+            # Classify stroke pattern based on A1 and A2 criteria into one of the four common push patterns (PM, SC, SLOP, DLOP)
+            label_push_pattern = classify_stroke_pattern(A1, A2)
+                
+            return areas, A1, A2, label_push_pattern
+        
+        
         pos_x = ts.data[f"Meta2{side}"][:, 0]
         vel_x = ts.data[f"Meta2{side}_df"]
 
@@ -377,7 +507,6 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
                 delta_t = events[i + 2].time - events[i].time
 
                 if delta_t > 0.4:
-
 
                     ts_cycle = ts.get_ts_between_times(t, t2)
                     ts_cycle.time = np.linspace(0, 100, len(ts_cycle.time))
@@ -473,7 +602,22 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             ts = ts.add_event(cycle["end_push"]["time"], "end_push")
 
         cycles = filtered_2
-
+    
+        # Classify each validated cycle into one of the four common push patterns (PM, SC, SLOP and DLOP)  
+        cycles_classified = []
+        
+        for cycle in cycles: 
+        
+            areas, A1, A2, label_push_pattern = classify_push_pattern(ts, cycle, side, arg)
+            
+            cycle["areas"] = areas
+            cycle["A1"] = float(A1)
+            cycle["A2"] = float(A2)
+            cycle["label_push_pattern"] = label_push_pattern
+            cycles_classified.append(cycle)
+        
+        cycles = cycles_classified
+            
         return cycles
 
     # Initialize the current window data
@@ -532,38 +676,6 @@ def plot_sides_kinematics(results):
 
         plt.tight_layout()
 
-def plot_side_kinematics(results, side):
-    """
-    Plot Position, velocity and acceleration for a single side
-    """
-    plt.figure()
-    plt.suptitle(f"Kinematics {side} side")
-    plt.subplot(3, 1, 1)
-    plt.title("Position")
-    colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
-
-    for i, cycle in enumerate(results["cycles"][side]):
-        start = cycle["in_push"]["time"]
-        end = cycle["end_push"]["time"]
-        color = colors[i % 2]
-
-        plt.axvspan(start, end, color=color, alpha=0.3)
-
-    plt.plot(
-        results["ts_full"][side].time,
-        results["ts_full"][side].data[f"Meta2{side}"][:, 0],
-        label=f"Meta2{side}",
-    )
-    plt.xlabel("Time (s)")
-    plt.legend()
-    plt.subplot(3, 1, 2)
-    plt.title("Velocity")
-    results["ts_full"][side].plot(f"Meta2{side}_df")
-    plt.subplot(3, 1, 3)
-    plt.title("Acceleration")
-    results["ts_full"][side].plot(f"Meta2{side}_dff")
-
-    plt.tight_layout()
 
 def plot_side_push_pattern(arg, results, side):
     """
@@ -578,8 +690,8 @@ def plot_side_push_pattern(arg, results, side):
         print(f"No cycles detected to plot for {side} side.")
         return
 
-    n_cols = 7
-    n_rows = 6
+    n_cols = 6
+    n_rows = 2
     max_cycles_per_page = n_cols * n_rows
 
     total_pages = int(np.ceil(num_cycles / max_cycles_per_page))
@@ -590,14 +702,36 @@ def plot_side_push_pattern(arg, results, side):
         end_idx = min(start_idx + max_cycles_per_page, num_cycles)
         page_cycles = cycles[start_idx:end_idx]
 
-        plt.figure(figsize=(15, n_rows * 2.5))
-
+        fig = plt.figure()
 
         plt.suptitle(f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)", fontsize=14, weight='bold', y=0.98)
 
         for i, cycle in enumerate(page_cycles, start=1):
             ax = plt.subplot(n_rows, n_cols, i)
 
+            # Draw positive and negative areas            
+            zones = cycle["areas"]
+            for zone in zones:
+                
+                _points = np.vstack((zone["recovery_phase"], zone["push_phase"][::-1]))
+                _facecolor = 'green' if zone["sign"] == "negative" else 'red'
+                _label = 'negative area' if zone["sign"] == "negative" else 'positive area'
+                            
+                poly_param = MplPolygon(_points, closed=True, fill=True, facecolor=_facecolor, alpha=0.4, label=_label)
+                ax.add_patch(poly_param)   
+
+            # Split the time-series cycle into recovery and push phases   
+            recovery_phase = results["ts_full"][side].get_ts_between_times(cycle["recovery"]["time"], cycle["end_push"]["time"]).data[f"Meta2{side}"][:, 0:2]
+            push_phase = results["ts_full"][side].get_ts_between_times(cycle["in_push"]["time"], cycle["recovery"]["time"]).data[f"Meta2{side}"][:, 0:2]
+        
+            # Draw the push phase
+            ax.plot(push_phase[0, 0], push_phase[0, 1], color="black", marker="o", markersize=4, linewidth=2, zorder=4, label="start push phase")   
+            ax.plot(push_phase[:, 0], push_phase[:, 1], color="black", linewidth=1, zorder=4, label="push phase")   
+             
+            # # Draw the recovery phase
+            ax.plot(recovery_phase[:, 0], recovery_phase[:, 1], color="black", linewidth=1, zorder=4, label="revovery phase", linestyle="--")
+
+            # Draw the wheel
             circle = plt.Circle(
                 (
                     arg[f"coordinates_{side}_wheel_center"][0],
@@ -605,22 +739,27 @@ def plot_side_push_pattern(arg, results, side):
                 ),
                 arg["wheel_diameter"] / 2,
                 fill=False,
-                linestyle="--",
+                linestyle="dotted",
+                label = "wheel",
             )
             ax.add_patch(circle)
 
-            ts = results["ts_full"][side].get_ts_between_times(
-                cycle["in_push"]["time"], cycle["end_push"]["time"]
-            )
-            ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])
 
             ax.set_xlim(-0.8, 0.2)
             ax.set_ylim(0, 1.15)
             ax.set_aspect("equal")
             global_cycle_number = start_idx + i
-            ax.set_title(f"Push n°{global_cycle_number}", fontsize=9)
+            ax.set_title(f"Push n°{global_cycle_number} \n {cycle['label_push_pattern']}")
+        
+        # Create a global legend for all subplots
+        handles, labels = ax.get_legend_handles_labels()
+        fig.legend(dict(zip(labels, handles)).values(),
+                   dict(zip(labels, handles)).keys())
+        
+        # Adjust subplot spacing
+        fig.subplots_adjust(top=0.9, hspace=0.4, wspace=0.3)
 
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
 
 def init_results():
     

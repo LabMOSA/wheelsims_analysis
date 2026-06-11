@@ -9,26 +9,26 @@ results = {
     "run_mode": "stop",
     "data": None,
     "current_window_data": None,
-    "cycles": {"left": [],"right": []},
-    "new_cycle_log": {"left": 1,"right": 1},
-    "new_cycle_send": {"left": 3,"right": 3},
-    "ts_full": {"left": None,"right": None},
-    }
+    "cycles": {"left": [], "right": []},
+    "new_cycle_log": {"left": 1, "right": 1},
+    "new_cycle_send": {"left": 3, "right": 3},
+    "ts_full": {"left": None, "right": None},
+}
 
-    
+
 def biofeedback_stop(arg):
     """
     Clear all data.
     Stop the module optitrack and clear the ot data.
     Display the full kinematics and push pattern graphics (by default is commented)
     """
-    
+
     try:
-    
+
         # Display full kinematics and push pattern graphics at script termination.
         # Reconstructs the global session dataset (limit_duration=0) and injects
         # the complete accumulated cycle history for both sides.
-        
+
         plot_sides_kinematics(results)
 
         plot_side_push_pattern(arg, results, "left")
@@ -36,26 +36,27 @@ def biofeedback_stop(arg):
 
     except Exception as e:
         print(f"Display full kinematics and push pattern : {e}")
-    
+
     # ktk.save("results", results)
-    
-    # results.clear()    
-    # results.update(init_results())
+
+    results.clear()
+    results.update(init_results())
 
     ot.stop()
     ot.clear()
-    
+
     print("Biofeedback closed")
-    
-    plt.show()    
-    
+
+    plt.show()
+
+
 def biofeedback_update(arg):
     """
     Execute a real-time update iteration for the biofeedback.
 
-    Handles the live streaming state machine: initializes the OptiTrack acquisition 
-    on startup, fetches new tracking frames, extracts and filters side-specific 
-    kinematics, detects propulsion cycles, logs progress, and streams computed 
+    Handles the live streaming state machine: initializes the OptiTrack acquisition
+    on startup, fetches new tracking frames, extracts and filters side-specific
+    kinematics, detects propulsion cycles, logs progress, and streams computed
     metrics to Godot.
     """
 
@@ -96,20 +97,27 @@ def biofeedback_update(arg):
 
         try:
             for side in ["left", "right"]:
-        
+
                 ts = current_window_data[side]["ts"]
-                
+
                 # If history timeserie is empty for this side, safely get the first timeserie
                 if ts_full[side] is None:
                     ts_full[side] = ts
                 else:
                     # Cut the timeserie to merge after the previous one ended
-                    ts_to_merge = ts.get_ts_after_time(ts_full[side].time[-1], inclusive = False)
-        
-                    ts_full[side].time = np.concatenate([ts_full[side].time, ts_to_merge.time])
-                    
+                    ts_to_merge = ts.get_ts_after_time(
+                        ts_full[side].time[-1], inclusive=False
+                    )
+
+                    ts_full[side].time = np.concatenate(
+                        [ts_full[side].time, ts_to_merge.time]
+                    )
+
                     for key in ts_full[side].data:
-                        ts_full[side].data[key] = np.concatenate([ts_full[side].data[key], ts_to_merge.data[key]], axis=0)
+                        ts_full[side].data[key] = np.concatenate(
+                            [ts_full[side].data[key], ts_to_merge.data[key]],
+                            axis=0,
+                        )
 
         except Exception as e:
             print(f"update_ts_full : {e}")
@@ -119,28 +127,49 @@ def biofeedback_update(arg):
         """
         Compute and send to Godot the median push frequency and the last 3 normalized push patterns whenever a new cycle is detected
         """
-        
+
         from python_bridge import send_data
 
         for side in ["left", "right"]:
 
-            if len(cycles[side]) >= 3 and len(cycles[side]) == new_cycle_send[side]:
+            if (
+                len(cycles[side]) >= 3
+                and len(cycles[side]) == new_cycle_send[side]
+            ):
 
-                mean_push_frequency = float(np.median([
-                    cycles[side][-1]["push_frequency"],
-                    cycles[side][-2]["push_frequency"],
-                    cycles[side][-3]["push_frequency"],
-                                            ]))
+                mean_push_frequency = float(
+                    np.median(
+                        [
+                            cycles[side][-1]["push_frequency"],
+                            cycles[side][-2]["push_frequency"],
+                            cycles[side][-3]["push_frequency"],
+                        ]
+                    )
+                )
 
-                last_push_pattern_1 = cycles[side][-1]["normalised_push_pattern"].tolist()
-                last_push_pattern_2 = cycles[side][-2]["normalised_push_pattern"].tolist()
-                last_push_pattern_3 = cycles[side][-3]["normalised_push_pattern"].tolist()
+                last_push_pattern_1 = cycles[side][-1][
+                    "normalised_push_pattern"
+                ].tolist()
+                last_push_pattern_2 = cycles[side][-2][
+                    "normalised_push_pattern"
+                ].tolist()
+                last_push_pattern_3 = cycles[side][-3][
+                    "normalised_push_pattern"
+                ].tolist()
 
-                data = {side: {"mean_push_frequency": mean_push_frequency,
-                                        "last_push_pattern_1": last_push_pattern_1,
-                                        "last_push_pattern_2": last_push_pattern_2,
-                                        "last_push_pattern_3": last_push_pattern_3,
-                                        }}
+                label_push_pattern = str(
+                    cycles[side][-1]["label_push_pattern"]
+                )
+
+                data = {
+                    side: {
+                        "mean_push_frequency": mean_push_frequency,
+                        "last_push_pattern_1": last_push_pattern_1,
+                        "last_push_pattern_2": last_push_pattern_2,
+                        "last_push_pattern_3": last_push_pattern_3,
+                        "label_push_pattern": label_push_pattern,
+                    }
+                }
 
                 send_data("biofeedback_update", data)
 
@@ -162,7 +191,10 @@ def biofeedback_update(arg):
                     push_frequency = cycles[side][-1]["push_frequency"]
                     label_push_pattern = cycles[side][-1]["label_push_pattern"]
 
-                    duration_cycle_analized = current_window_data[side]["ts"].time[-1] - current_window_data[side]["ts"].time[0]
+                    duration_cycle_analized = (
+                        current_window_data[side]["ts"].time[-1]
+                        - current_window_data[side]["ts"].time[0]
+                    )
 
                     print(
                         f"{f'{side}':<8} "
@@ -179,39 +211,51 @@ def biofeedback_update(arg):
             print(f"print_log : {e}")
 
         return new_cycle_log
-    
+
     if results["run_mode"] == "stop":
-        
+
         ot.start()
 
         time.sleep(1)
 
         print("Biofeedback started")
-        
+
         results["run_mode"] = "start"
-    
+
     elif results["run_mode"] == "start":
-    
+
         start = time.time()
-    
+
         try:
             results["data"] = ot.fetch()
         except Exception as e:
             print(e)
-        
+
         if not results["data"]:
             return
 
         end = time.time()
-        
-        results["current_window_data"] = analyze_current_window(results["data"], arg, results["cycles"], limit_duration=5)
-        results["cycles"] = update_data_cycles(results["cycles"], results["current_window_data"])
-        results["ts_full"] = update_ts_full(results["ts_full"], results["current_window_data"])
-        
-        
-        results["new_cycle_send"] = send_data_godot(results["new_cycle_send"], results["cycles"])
-        
-        results["new_cycle_log"] = print_log(results["new_cycle_log"], results["cycles"], results["current_window_data"])
+
+        results["current_window_data"] = analyze_current_window(
+            results["data"], arg, results["cycles"], limit_duration=5
+        )
+        results["cycles"] = update_data_cycles(
+            results["cycles"], results["current_window_data"]
+        )
+        results["ts_full"] = update_ts_full(
+            results["ts_full"], results["current_window_data"]
+        )
+
+        results["new_cycle_send"] = send_data_godot(
+            results["new_cycle_send"], results["cycles"]
+        )
+
+        results["new_cycle_log"] = print_log(
+            results["new_cycle_log"],
+            results["cycles"],
+            results["current_window_data"],
+        )
+
 
 def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
     """
@@ -219,7 +263,6 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
     """
 
     def initialize_data_side():
-
         """
         Initializes and structures calibration coordinates for both sides.
         """
@@ -333,9 +376,9 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
         """
         Detects voluntary propulsion cycles from position time series based on kinematic and temporal criteria
         """
-        
+
         def classify_push_pattern(ts, cycles, side, arg):
-            
+
             def compute_geometric_zones(recovery_phase, push_phase):
                 """
                 Compute signed areas between recovery and push trajectories by
@@ -343,128 +386,175 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
                 """
                 recovery = np.array(recovery_phase)
                 push = np.array(push_phase)
-                
+
                 # Sort push curve by anteroposterior for interpolation
                 push_sorted = push[np.argsort(push[:, 0])]
-                
+
                 y_push_interpolated = np.interp(
-                    recovery[:, 0], 
-                    push_sorted[:, 0], 
-                    push_sorted[:, 1]
-                    )
-                
+                    recovery[:, 0], push_sorted[:, 0], push_sorted[:, 1]
+                )
+
                 # Mask to detect if the hand in the recovery crosses the push line
                 above = recovery[:, 1] >= y_push_interpolated
-                
+
                 # Ensure last segment is closed
                 extended_mask = np.append(above, not above[-1])
-                        
+
                 areas = []
                 start_idx = 0
                 current_sign = above[0]
-                
+
                 for i in range(1, len(extended_mask)):
 
                     if extended_mask[i] != current_sign:
 
-                        current_recovery_phase = recovery[start_idx:i+1]
-                        current_push_phase = np.column_stack((recovery[start_idx:i+1, 0], y_push_interpolated[start_idx:i+1]))
-                        
+                        current_recovery_phase = recovery[start_idx : i + 1]
+                        current_push_phase = np.column_stack(
+                            (
+                                recovery[start_idx : i + 1, 0],
+                                y_push_interpolated[start_idx : i + 1],
+                            )
+                        )
+
                         # Calculating geometric area using the trapezoidal rule
-                        dx = current_recovery_phase[1:, 0] - current_recovery_phase[:-1, 0]
-                        mean_recovery_y = (current_recovery_phase[1:, 1] + current_recovery_phase[:-1, 1]) / 2.0
-                        mean_push_y = (current_push_phase[1:, 1] + current_push_phase[:-1, 1]) / 2.0
-                        
-                        area = np.sum((mean_recovery_y  - mean_push_y) * dx)
-                        
-                        areas.append({
-                            "sign": "positive" if current_sign else "negative",
-                            "area": abs(area),
-                            "recovery_phase": current_recovery_phase,
-                            "push_phase": current_push_phase
-                        })
-                        
+                        dx = (
+                            current_recovery_phase[1:, 0]
+                            - current_recovery_phase[:-1, 0]
+                        )
+                        mean_recovery_y = (
+                            current_recovery_phase[1:, 1]
+                            + current_recovery_phase[:-1, 1]
+                        ) / 2.0
+                        mean_push_y = (
+                            current_push_phase[1:, 1]
+                            + current_push_phase[:-1, 1]
+                        ) / 2.0
+
+                        area = np.sum((mean_recovery_y - mean_push_y) * dx)
+
+                        areas.append(
+                            {
+                                "sign": (
+                                    "positive" if current_sign else "negative"
+                                ),
+                                "area": abs(area),
+                                "recovery_phase": current_recovery_phase,
+                                "push_phase": current_push_phase,
+                            }
+                        )
+
                         start_idx = i
                         current_sign = extended_mask[i]
-                    
+
                 return areas
-                
-            def compute_A1(deviation_max, recovery_phase, push_phase, side, arg):
+
+            def compute_A1(
+                deviation_max, recovery_phase, push_phase, side, arg
+            ):
                 """
                 Normalized index of recovery-phase deviation relative to push-phase radius.
 
                 A1 compares the hand deviation during recovery to a reference
                 threshold (d_max). Values > 1 indicate large deviation.
                 """
-                
-                push_distances = np.sqrt((push_phase[:, 0] - arg[f"coordinates_{side}_wheel_center"][0])**2 + (push_phase[:, 1] - arg[f"coordinates_{side}_wheel_center"][1])**2)
-                distance_hand_wheel_center = np.sqrt((recovery_phase[:, 0] - arg[f"coordinates_{side}_wheel_center"][0])**2 + (recovery_phase[:, 1] - arg[f"coordinates_{side}_wheel_center"][1])**2)
-                
+
+                push_distances = np.sqrt(
+                    (
+                        push_phase[:, 0]
+                        - arg[f"coordinates_{side}_wheel_center"][0]
+                    )
+                    ** 2
+                    + (
+                        push_phase[:, 1]
+                        - arg[f"coordinates_{side}_wheel_center"][1]
+                    )
+                    ** 2
+                )
+                distance_hand_wheel_center = np.sqrt(
+                    (
+                        recovery_phase[:, 0]
+                        - arg[f"coordinates_{side}_wheel_center"][0]
+                    )
+                    ** 2
+                    + (
+                        recovery_phase[:, 1]
+                        - arg[f"coordinates_{side}_wheel_center"][1]
+                    )
+                    ** 2
+                )
+
                 min_push_distance = np.min(push_distances)
-                deviation = np.sort(np.abs(distance_hand_wheel_center - min_push_distance))
-            
+                deviation = np.sort(
+                    np.abs(distance_hand_wheel_center - min_push_distance)
+                )
+
                 # Median of the upper quartile (75–100%)
-                mean_distance_deviation = np.median(deviation[int(len(deviation) * 0.75):])
-                
+                mean_distance_deviation = np.median(
+                    deviation[int(len(deviation) * 0.75) :]
+                )
+
                 A1 = mean_distance_deviation / deviation_max
-                
+
                 return A1
-                
+
             def compute_A2(zones_detectees):
                 """
                 Symmetry index based on signed areas.
-            
+
                 A2 = (positive areas - negative areas) / total areas
                 Range: [-1, 1]
                     +1 --> positive dominance
                     -1 --> negative dominance
                 """
-                
+
                 Ap = 0
                 An = 0
-                
+
                 for zone in zones_detectees:
                     if zone["sign"] == "positive":
                         Ap += zone["area"]
                     if zone["sign"] == "negative":
                         An += zone["area"]
-                        
-                A2 = (Ap - An)/(Ap + An)
-                
+
+                A2 = (Ap - An) / (Ap + An)
+
                 return A2
 
             def classify_stroke_pattern(A1, A2):
                 """
                 Classify propulsion pattern from A1 and A2.
                 """
-                
+
                 if A1 < 1:
                     return "Pumping (PM)"
                 elif A2 <= -0.75:
                     return "Semi-Circular (SC)"
-                elif A2 >=  0.75:
+                elif A2 >= 0.75:
                     return "Single-Loop (SLOP)"
                 elif A2 < 0.75 and A2 > -0.75:
                     return "Double-Loop (DLOP)"
                 else:
                     return ""
 
-            # Split the time-series cycle into recovery and push phases    
-            recovery_phase = ts.get_ts_between_times(cycles["recovery"]["time"], cycles["end_push"]["time"]).data[f"Meta2{side}"][:, 0:2]
-            push_phase = ts.get_ts_between_times(cycles["in_push"]["time"], cycles["recovery"]["time"]).data[f"Meta2{side}"][:, 0:2]
-            
+            # Split the time-series cycle into recovery and push phases
+            recovery_phase = ts.get_ts_between_times(
+                cycles["recovery"]["time"], cycles["end_push"]["time"]
+            ).data[f"Meta2{side}"][:, 0:2]
+            push_phase = ts.get_ts_between_times(
+                cycles["in_push"]["time"], cycles["recovery"]["time"]
+            ).data[f"Meta2{side}"][:, 0:2]
+
             # Compute A1 and A2 criteria
             areas = compute_geometric_zones(recovery_phase, push_phase)
-        
-            A1 = compute_A1(0.06, recovery_phase, push_phase, side, arg)
+
+            A1 = compute_A1(0.1, recovery_phase, push_phase, side, arg)
             A2 = compute_A2(areas)
-            
+
             # Classify stroke pattern based on A1 and A2 criteria into one of the four common push patterns (PM, SC, SLOP, DLOP)
             label_push_pattern = classify_stroke_pattern(A1, A2)
-                
+
             return areas, A1, A2, label_push_pattern
-        
-        
+
         pos_x = ts.data[f"Meta2{side}"][:, 0]
         vel_x = ts.data[f"Meta2{side}_df"]
 
@@ -513,7 +603,9 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
 
                     ts_normalised = ts_cycle.resample(np.linspace(0, 100, 101))
 
-                    normalised_push_pattern = ts_normalised.data[f"Meta2{side}"][:, 0:3]
+                    normalised_push_pattern = ts_normalised.data[
+                        f"Meta2{side}"
+                    ][:, 0:3]
 
                     cycles.append(
                         {
@@ -530,7 +622,9 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
                                 "value": float(pos_x[index_t2]),
                             },
                             "range": float(pos_x[index_t1] - pos_x[index_t]),
-                            "velocity_max": float(np.nanmax(vel_x[index_t:index_t2])),
+                            "velocity_max": float(
+                                np.nanmax(vel_x[index_t:index_t2])
+                            ),
                             "push_frequency": float(1 / delta_t),
                             "normalised_push_pattern": normalised_push_pattern,
                         }
@@ -569,18 +663,22 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             if len(prev_data_cycles) < 3:
                 filtered_2.append(cycles[r])
                 continue
-            
+
             duration_ts = ts.time[-1] - ts.time[0]
-            
+
             if duration_ts >= 3:
-                mean_value = ts.get_ts_after_time(ts.time[-1] - 3).data[f"Meta2{side}"][:, 0].mean()
+                mean_value = (
+                    ts.get_ts_after_time(ts.time[-1] - 3)
+                    .data[f"Meta2{side}"][:, 0]
+                    .mean()
+                )
             else:
                 mean_value = ts.data[f"Meta2{side}"][:, 0].mean()
 
             t0 = ts.get_index_at_time(cycles[r]["in_push"]["time"])
             t2 = ts.get_index_at_time(cycles[r]["end_push"]["time"])
 
-            segment = signal[t0: t2 + 1]
+            segment = signal[t0 : t2 + 1]
 
             crossed_up = False
             crossed_down = False
@@ -602,28 +700,30 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             ts = ts.add_event(cycle["end_push"]["time"], "end_push")
 
         cycles = filtered_2
-    
-        # Classify each validated cycle into one of the four common push patterns (PM, SC, SLOP and DLOP)  
+
+        # Classify each validated cycle into one of the four common push patterns (PM, SC, SLOP and DLOP)
         cycles_classified = []
-        
-        for cycle in cycles: 
-        
-            areas, A1, A2, label_push_pattern = classify_push_pattern(ts, cycle, side, arg)
-            
+
+        for cycle in cycles:
+
+            areas, A1, A2, label_push_pattern = classify_push_pattern(
+                ts, cycle, side, arg
+            )
+
             cycle["areas"] = areas
             cycle["A1"] = float(A1)
             cycle["A2"] = float(A2)
             cycle["label_push_pattern"] = label_push_pattern
             cycles_classified.append(cycle)
-        
+
         cycles = cycles_classified
-            
+
         return cycles
 
     # Initialize the current window data
     current_window_data = {
         "left": {"ts": None, "cycles": None},
-        "right": {"ts": None, "cycles": None}
+        "right": {"ts": None, "cycles": None},
     }
 
     data_side = initialize_data_side()
@@ -682,7 +782,6 @@ def plot_side_push_pattern(arg, results, side):
     Plot push pattern for a single side
     """
 
-
     cycles = results["cycles"][side]
     num_cycles = len(cycles)
 
@@ -704,32 +803,86 @@ def plot_side_push_pattern(arg, results, side):
 
         fig = plt.figure()
 
-        plt.suptitle(f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)", fontsize=14, weight='bold', y=0.98)
+        plt.suptitle(
+            f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)",
+            fontsize=14,
+            weight="bold",
+            y=0.98,
+        )
 
         for i, cycle in enumerate(page_cycles, start=1):
             ax = plt.subplot(n_rows, n_cols, i)
 
-            # Draw positive and negative areas            
+            # Draw positive and negative areas
             zones = cycle["areas"]
             for zone in zones:
-                
-                _points = np.vstack((zone["recovery_phase"], zone["push_phase"][::-1]))
-                _facecolor = 'green' if zone["sign"] == "negative" else 'red'
-                _label = 'negative area' if zone["sign"] == "negative" else 'positive area'
-                            
-                poly_param = MplPolygon(_points, closed=True, fill=True, facecolor=_facecolor, alpha=0.4, label=_label)
-                ax.add_patch(poly_param)   
 
-            # Split the time-series cycle into recovery and push phases   
-            recovery_phase = results["ts_full"][side].get_ts_between_times(cycle["recovery"]["time"], cycle["end_push"]["time"]).data[f"Meta2{side}"][:, 0:2]
-            push_phase = results["ts_full"][side].get_ts_between_times(cycle["in_push"]["time"], cycle["recovery"]["time"]).data[f"Meta2{side}"][:, 0:2]
-        
+                _points = np.vstack(
+                    (zone["recovery_phase"], zone["push_phase"][::-1])
+                )
+                _facecolor = "green" if zone["sign"] == "negative" else "red"
+                _label = (
+                    "negative area"
+                    if zone["sign"] == "negative"
+                    else "positive area"
+                )
+
+                poly_param = MplPolygon(
+                    _points,
+                    closed=True,
+                    fill=True,
+                    facecolor=_facecolor,
+                    alpha=0.4,
+                    label=_label,
+                )
+                ax.add_patch(poly_param)
+
+            # Split the time-series cycle into recovery and push phases
+            recovery_phase = (
+                results["ts_full"][side]
+                .get_ts_between_times(
+                    cycle["recovery"]["time"], cycle["end_push"]["time"]
+                )
+                .data[f"Meta2{side}"][:, 0:2]
+            )
+            push_phase = (
+                results["ts_full"][side]
+                .get_ts_between_times(
+                    cycle["in_push"]["time"], cycle["recovery"]["time"]
+                )
+                .data[f"Meta2{side}"][:, 0:2]
+            )
+
             # Draw the push phase
-            ax.plot(push_phase[0, 0], push_phase[0, 1], color="black", marker="o", markersize=4, linewidth=2, zorder=4, label="start push phase")   
-            ax.plot(push_phase[:, 0], push_phase[:, 1], color="black", linewidth=1, zorder=4, label="push phase")   
-             
+            ax.plot(
+                push_phase[0, 0],
+                push_phase[0, 1],
+                color="black",
+                marker="o",
+                markersize=4,
+                linewidth=2,
+                zorder=4,
+                label="start push phase",
+            )
+            ax.plot(
+                push_phase[:, 0],
+                push_phase[:, 1],
+                color="black",
+                linewidth=1,
+                zorder=4,
+                label="push phase",
+            )
+
             # # Draw the recovery phase
-            ax.plot(recovery_phase[:, 0], recovery_phase[:, 1], color="black", linewidth=1, zorder=4, label="revovery phase", linestyle="--")
+            ax.plot(
+                recovery_phase[:, 0],
+                recovery_phase[:, 1],
+                color="black",
+                linewidth=1,
+                zorder=4,
+                label="revovery phase",
+                linestyle="--",
+            )
 
             # Draw the wheel
             circle = plt.Circle(
@@ -740,51 +893,64 @@ def plot_side_push_pattern(arg, results, side):
                 arg["wheel_diameter"] / 2,
                 fill=False,
                 linestyle="dotted",
-                label = "wheel",
+                label="wheel",
             )
             ax.add_patch(circle)
 
-
-            ax.set_xlim(-0.8, 0.2)
+            ax.set_xlim(-0.5, 0.3)
             ax.set_ylim(0, 1.15)
             ax.set_aspect("equal")
             global_cycle_number = start_idx + i
-            ax.set_title(f"Push n°{global_cycle_number} \n {cycle['label_push_pattern']}")
-        
+            A1 = cycle["A1"]
+            A2 = cycle["A2"]
+            ax.set_title(
+                f"Push n°{global_cycle_number} \n A1 : {A1:.2f}   ¦   A2 : {A2:.2f} \n {cycle['label_push_pattern']}"
+            )
+
         # Create a global legend for all subplots
         handles, labels = ax.get_legend_handles_labels()
-        fig.legend(dict(zip(labels, handles)).values(),
-                   dict(zip(labels, handles)).keys())
-        
+        fig.legend(
+            dict(zip(labels, handles)).values(),
+            dict(zip(labels, handles)).keys(),
+        )
+
         # Adjust subplot spacing
         fig.subplots_adjust(top=0.9, hspace=0.4, wspace=0.3)
 
 
-
 def init_results():
-    
+
     results = {
         "run_mode": "stop",
         "data": None,
         "current_window_data": None,
-        "cycles": {"left": [],"right": []},
-        "new_cycle_log": {"left": 1,"right": 1},
-        "new_cycle_send": {"left": 3,"right": 3},
-        "ts_full": {"left": None,"right": None},
-        }
+        "cycles": {"left": [], "right": []},
+        "new_cycle_log": {"left": 1, "right": 1},
+        "new_cycle_send": {"left": 3, "right": 3},
+        "ts_full": {"left": None, "right": None},
+    }
 
     return results
+
 
 if __name__ == "__main__":
 
     arg = {
-           "coordinates_left_wheel_center": [-0.504, 0.295, -0.779,],
-           "coordinates_right_wheel_center": [-0.500, 0.296, -0.204,],
-           "coordinates_left_hand": [0.081, -0.029, 0.082],
-           "coordinates_right_hand": [0.003, -0.145, 0.010],
-           "wheel_diameter": 0.54,
-           }
-    
+        "coordinates_left_wheel_center": [
+            -0.504,
+            0.295,
+            -0.779,
+        ],
+        "coordinates_right_wheel_center": [
+            -0.500,
+            0.296,
+            -0.204,
+        ],
+        "coordinates_left_hand": [0.081, -0.029, 0.082],
+        "coordinates_right_hand": [0.003, -0.145, 0.010],
+        "wheel_diameter": 0.54,
+    }
+
     try:
         while True:
             biofeedback_update(arg)

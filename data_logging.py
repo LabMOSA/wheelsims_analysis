@@ -2,7 +2,6 @@ import os
 from datetime import date
 import csv
 import glob
-from kineticstoolkit import TimeSeries
 import numpy as np
 
 from nextwheel.software.python.nextwheel import NextWheel
@@ -50,16 +49,16 @@ def _make_folder(
     return folder
 
 
-def _get_session(folder: str) -> int:
+def _get_number(folder: str) -> int:
     """
-    Identify session currently being recorded through folder-parsing.
+    Identify session or trial currently in-progress through folder-parsing.
 
     If none are found, returns 0.
 
     Parameters
     ----------
     folder :
-        Folder corresponding to current participant.
+        Folder corresponding to current participant and/or session.
 
     Returns
     -------
@@ -70,113 +69,84 @@ def _get_session(folder: str) -> int:
         f for f in glob.glob(os.path.join(folder, "*")) if os.path.isdir(f)
     ]
     if (len(folders)) > 0:
-        session = len(folders) - 1
+        number = len(folders)
     else:
-        session = 0
-    return session
+        number = 0
+    return number
 
 
-def _get_trial(folder: str) -> int:
+# %% File generation
+
+
+def _make_header(data_type: str) -> list[list[str]]:
     """
-    Identify trial currently being recorded through folder-parsing.
-
-    If none are found, returns 0.
+    Create a header appropriate for the type of data to be saved.
 
     Parameters
     ----------
-    folder :
-        Sub-folder corresponding to current participant and session.
-
-    Returns
-    -------
-    trial :
-        Current trial number.
-    """
-    folders = [
-        f for f in glob.glob(os.path.join(folder, "*")) if os.path.isdir(f)
-    ]
-    if (len(folders)) > 0:
-        trials = [int(folder.split("\\T")[-1]) for folder in folders]
-        trial = max(trials)
-    else:
-        trial = 0
-    return trial
-
-
-def _find_files(
-    directory: str, scene: str, participant: str, trial: str
-) -> tuple[list[str], str]:
-    """
-    Find files related to trial in-progress within current recording session.
-
-    Parameters
-    ----------
-    directory :
-        Folder containing data for all of the participants.
-    scene :
-        Selected playable scene for current session.
-    participant :
-        Current participant identifier.
-    trial :
-        Current trial number.
-
-    Returns
-    -------
-    trial_files :
-        Files pertaining to the current trial in-progress.
-    trial_basename :
-        Common base for all files pertaining to this trial.
-    """
-    if os.path.exists(directory):
-        data_folder = os.path.join(
-            directory, participant, str(date.today()), "T" + trial
-        )
-
-        trial_files = glob.glob(
-            os.path.join(
-                data_folder, "*" + str(date.today()) + "_T" + trial + "*.csv"
-            )
-        )
-
-        trial_basename = trial_files[0].rsplit("_", 1)[0] + "_"
-    else:
-        print("The data-saving folder selected does not exist.")
-    return trial_files, trial_basename
-
-
-# %% File generation - Simulator
-
-
-def _make_header(
-    trajectory_data: list[str] | None = ["position", "rotation"],
-    data_column: int | None = 4,
-) -> list[list[str]]:
-    """
-    Create a header appropriate for the trajectory data to be saved.
-
-    Parameters
-    ----------
-    trajectory_data : optional
-        The two data types to be saved through the Godot interface.
-        The default is ["position", "rotation"].
-    data_columns : optional
-        The number of columns to be expected for each trajectory data to save
-        The default is 4.
+    data_type :
+        The type of data to be saved from Simulator or instrumented wheels.
+        Options are:
+            Simulator (through Godot): trajectory.
+            NextWheel: Analog, IMU, Encoder, Power.
 
     Returns
     -------
     header :
-        Header corresponding to the file to be created.
+        Header to be used when creating the CSV file.
     """
+    data_to_save, data_columns = _select_header(data_type)
     header = ["time"] + [
-        trajectory_data[i] + "[:," + str(j) + "]"
-        for i in range(len(trajectory_data))
-        for j in range(data_column)
+        data_to_save[i] + "[:," + str(j) + "]"
+        for i in range(len(data_to_save))
+        for j in range(data_columns[i])
     ]
     return header
 
 
-def _make_filename(session: str, trial: str, scene: str) -> list[str]:
+def _select_header(data_type: str) -> tuple[list[str], list[int]]:
+    """
+    Selects the column titles and number of columns for the CSV file's header.
+
+    Parameters
+    ----------
+    data_type :
+        The type of data to be saved from Simulator or instrumented wheels.
+        Options are:
+            Simulator (through Godot): trajectory.
+            NextWheel: Events, Analog, IMU, Encoder, Power.
+
+    Returns
+    -------
+    data_to_save :
+        The specific column titles to be saved in the CSV file.
+    data_columns :
+        The number of columns per column title.
+    """
+    if data_type == "trajectory":
+        data_to_save = ["position", "rotation"]
+        data_columns = [4, 4]
+    elif data_type == "Events":
+        data_to_save = ["Event Name"]
+        data_columns = ([1],)
+    elif data_type == "Analog":
+        data_to_save = ["Channels", "Force", "Moment"]
+        data_columns = [7, 4, 4]
+    elif data_type == "IMU":
+        data_to_save = ["Acc", "Gyro", "Mag"]
+        data_columns = [3, 3, 3]
+    elif data_type == "Encoder":
+        data_to_save = ["Angle"]
+        data_columns = [1]
+    elif data_type == "Power":
+        data_to_save = ["Voltage", "Current", "Power"]
+        data_columns = [1, 1, 1]
+    return data_to_save, data_columns
+
+
+def _make_filename(
+    session: str, trial: str, scene: str, data_type: str
+) -> list[str]:
     """
     Create a filename appropriate for the trajectory data to be saved.
 
@@ -188,6 +158,12 @@ def _make_filename(session: str, trial: str, scene: str) -> list[str]:
         Current trial number.
     scene :
         Current playable scene selected (out of 6 options).
+    data_type:
+        The type of data to be saved from Simulator or instrumented wheels.
+        Options are:
+            Simulator (through Godot): trajectory.
+            NextWheel: Analog, IMU, Encoder, Power.
+
 
     Returns
     -------
@@ -204,7 +180,9 @@ def _make_filename(session: str, trial: str, scene: str) -> list[str]:
         + trial
         + "_"
         + scene
-        + "_trajectory.csv"
+        + "_"
+        + data_type
+        + ".csv"
     )
 
     return file
@@ -232,113 +210,56 @@ def _make_csv(folder: str, filename: str, header: list[str]) -> None:
         writer.writerow(header)
 
 
-# %% File generation - instrumented wheels
-
-
 def _create_wheels(
-    filename: str,
-    wheels: NextWheel | None = wheels,
-    wheel_data: dict[str, dict] | None = {
-        "Analog": {"Time": [], "Channels": [], "Force": [], "Moment": []},
-        "IMU": {"Time": [], "Acc": [], "Gyro": [], "Mag": []},
-        "Encoder": {"Time": [], "Angle": []},
-        "Power": {"Time": [], "Voltage": [], "Current": [], "Power": []},
-    },
-    wheel_events: dict | None = {},
+    trial_folder: str,
+    session: int,
+    trial: int,
+    scene: str,
+    wheel_data: list[str] | None = [
+        "Analog",
+        "IMU",
+        "Encoder",
+        "Power",
+    ],
 ) -> None:
     """
-    Create and save dictionaries to hold instrumented wheels data and events.
-
-    Typical events include logging initiation and termination, new trials.
+    Create and save CSV files to hold instrumented wheels data and events.
 
     Parameters
     ----------
-    filename :
-        The base filename for the two dictionaries, of the form: SX_YYYY-MM-DD-
-        where X is the session number.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
+    trial_folder :
+        The folder containing data for the current trial in-progress.
+    session :
+        The current session number.
+    trial :
+        The current trial number.
+    scene :
+        The current playable scene selected.
     wheel_data : optional
-        A dictionary of the structure required to collect data from the wheels.
-        The default is {"Analog": {"Time": [], "Channels": [], "Force": [], "Moment": []},
-                        "IMU": {"Time": [], "Acc": [], "Gyro": [], "Mag": []},
-                        "Encoder": {"Time": [], "Angle": []},
-                        "Power": {"Time": [], "Voltage": [], "Current": [], "Power": []}}.
-    wheel_events : optional
-        An empty dictionary where events will be collected as
-        wheel_events['event_name'] = timestamp.
-        The default is {}.
+        The different types of wheel data that can be saved.
+        The default is ["Analog", "IMU", "Encoder", "Power"].
 
     Returns
     -------
     None
     """
-
-    np.save(
-        filename + "_events.npy",
-        wheel_events,
-        allow_pickle=True,
-    )
-
-    for key in wheels.keys():
-        np.save(
-            filename + "_data_" + key + ".npy",
-            wheel_data,
-            allow_pickle=True,
-        )
-
-
-# %% File contents
-
-
-def _load_wheels(
-    trial_folder: str, filebase: str, wheel_type: str, side: str | None = ""
-):
-    """
-    Load a numpy file containing instrumented wheels information (as a dict).
-
-    Parameters
-    ----------
-    session_folder :
-        The folder where data relating to the current session is saved.
-    filebase :
-        The base filename for the events file to load, of the form:
-        SX_YYYY-MM-DD- where X is the session number.
-    wheel_type :
-        The type of file to be loaded: either 'events' or 'data'.
-    side : optional
-        The specific wheel for which recording must be stopped, if relevant
-        The default is "", for the function to work for event files are well.
-
-
-    Returns
-    -------
-    TYPE
-        DESCRIPTION.
-    """
-    wheel_dict = np.load(
-        os.path.join(
-            trial_folder, filebase + "_" + wheel_type + side + ".npy"
-        ),
-        allow_pickle=True,
-    ).item()
-
-    return wheel_dict
+    for key in wheel_data:
+        header = _make_header(key)
+        filename = _make_filename(str(session), str(trial), scene, key)
+        _make_csv(trial_folder, filename, header)
 
 
 # %% Logging simulator
 
 
-def _save_trajectory(base: str, data_values: dict[str, str]) -> None:
+def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
     """
     Open and append data to an already-created CSV file containing trajectory.
 
     Parameters
     ----------
-    base :
-        Current participant's data sub-folder.
+    filename :
+        Name of the file in which current trial's data is saved.
     data_values :
         Current data values to save.
 
@@ -346,8 +267,6 @@ def _save_trajectory(base: str, data_values: dict[str, str]) -> None:
     -------
     None
     """
-    filename = base + "trajectory.csv"
-
     timestamp = data_values["time"]
 
     data_line = (
@@ -366,42 +285,6 @@ def _save_trajectory(base: str, data_values: dict[str, str]) -> None:
 # %% Logging instrumented wheels
 
 
-def _event_wheels(
-    trial_folder: str, wheel_file: str, event_name: str, time: str
-) -> None:
-    """
-    Open and append event to instrumented wheels event dictionary.
-
-    Parameters
-    ----------
-    session_folder :
-        The folder where data relating to the current session is saved.
-    wheel_file :
-        The base filename for the events file to load, of the form:
-        SX_YYYY-MM-DD- where X is the session number.
-    event_name :
-        Name of the event to be logged. Conventions:
-            'start_logging' for logging initiation,
-            'TX_scene' for initiation of trial number X of scene name 'scene',
-            'stop_logging' for logging termination.
-    time:
-        Time of the event to be logged
-
-    Returns
-    -------
-    None
-    """
-    wheel_events = _load_wheels(trial_folder, wheel_file, "events")
-
-    wheel_events[event_name] = time
-    print("Sent new scene event to NextWheel: " + event_name)
-    np.save(
-        os.path.join(trial_folder, wheel_file + "_events.npy"),
-        wheel_events,
-        allow_pickle=True,
-    )
-
-
 def _save_wheels(
     session: str,
     trial_folder: str,
@@ -409,6 +292,12 @@ def _save_wheels(
     trial: str,
     wheels: NextWheel | None = wheels,
     side: str | None = "right",
+    wheel_data: list[str] | None = [
+        "Analog",
+        "IMU",
+        "Encoder",
+        "Power",
+    ],
 ) -> None:
     """
     Open and append data to instrumented wheels data dictionary.
@@ -430,54 +319,29 @@ def _save_wheels(
     side : optional
         The specific wheel for which recording must be stopped.
         The default is "right".
+    wheel_data : optional
+        The different types of wheel data that can be saved.
+        The default is ["Analog", "IMU", "Encoder", "Power"].
 
     Returns
     -------
     None
     """
-    wheel_file = (
-        "S"
-        + str(session)
-        + "_"
-        + str(date.today())
-        + "_T"
-        + trial
-        + "_"
-        + scene
-    )
-    wheel_data = _load_wheels(
-        trial_folder, wheel_file, "data", side="_" + side
-    )
-
     nw = wheels[side].fetch(clear=True)
 
     for key in nw.keys():
-        if len(wheel_data[key]["Time"]) == 0:
-            wheel_data[key]["Time"] = nw[key].time.reshape(-1, 1)
-        else:
-            wheel_data[key]["Time"] = np.vstack(
-                (wheel_data[key]["Time"], nw[key].time.reshape(-1, 1))
-            )
+        filename = _make_filename(session, trial, scene, key)
 
-        for subkey in nw[key].data.keys():
-            data = nw[key].data[subkey]
+        data_lines = np.column_stack(
+            [nw[key].time]
+            + [nw[key].data[subkey] for subkey in nw[key].data.keys()]
+        )
 
-            if data.shape[0] > 0:
-                if len(data.shape) == 1:
-                    data = data.reshape(-1, 1)
-
-                if (len(wheel_data[key][subkey])) == 0:
-                    wheel_data[key][subkey] = data
-                else:
-                    wheel_data[key][subkey] = np.vstack(
-                        (wheel_data[key][subkey], data)
-                    )
-
-    np.save(
-        os.path.join(trial_folder, wheel_file + "_data_" + side + ".npy"),
-        wheel_data,
-        allow_pickle=True,
-    )
+        with open(
+            os.path.join(trial_folder, filename), "a", newline=""
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerows(data_lines)
 
 
 def _stop_wheels(
@@ -526,63 +390,12 @@ def _stop_wheels(
         + scene
     )
 
-    _event_wheels(trial_folder, wheel_file, "stream_stop", time)
-
     for key in wheels.keys():
         wheels[key].stop_streaming()
         _save_wheels(session, trial_folder, scene, trial, side=key)
         print("Successfully stopped stream from wheel: " + wheels[key].IP)
 
     return wheel_file
-
-
-def _convert_wheels(
-    wheel_file: str,
-    trial_folder: str,
-    wheels: NextWheel | None = wheels,
-) -> None:
-    """
-    Convert wheels data to TimeSeries, append events, save final files.
-
-    Parameters
-    ----------
-    wheel_file :
-        Basename of files pertaining to instrumented wheels for current trial.
-    trial_folder :
-        Current trial folder.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
-
-    Returns
-    -------
-    None
-    """
-    wheel_events = _load_wheels(trial_folder, wheel_file, "events")
-
-    for side in wheels.keys():
-        wheel_data = _load_wheels(
-            trial_folder, wheel_file, "data", side="_" + side
-        )
-
-        for key in wheel_data.keys():
-            wheel_time = wheel_data[key]["Time"][:, 0]
-
-            wheel_data[key] = TimeSeries(time=wheel_time, data=wheel_data[key])
-
-            for subkey in wheel_events:
-                wheel_data[key].add_event(
-                    time=float(wheel_events[subkey]),
-                    name=subkey,
-                    in_place=True,
-                )
-
-        np.save(
-            os.path.join(trial_folder, wheel_file + "_" + side + ".npy"),
-            wheel_data,
-            allow_pickle=True,
-        )
 
 
 # %% Public functions
@@ -593,7 +406,10 @@ def start_log(
         "motion_capture",
     ],
     wheels: dict[NextWheel, NextWheel] | None = wheels,
-    IP: dict[str, str] | None = {"right": "192.168.0.86", "left": "0.0.0.0"},
+    IP: dict[str, str] | None = {
+        "right": "192.168.0.86",
+        "left": "192.168.0.13",
+    },
 ) -> None:
     """
     Create folders for current (new) session, in which trials will be saved.
@@ -625,11 +441,10 @@ def start_log(
     None
     """
     folder = _make_folder(arg["folder"], arg["participant"])
-    _ = _get_session(folder)
+    _ = _get_number(folder)
     _ = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
     )
-    print("starting to log...")
 
     if arg["instrumented_wheels"] == True:
         for key in wheels.keys():
@@ -667,12 +482,12 @@ def create_trial(arg: dict[str, str | bool]) -> None:
     None
     """
     folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_session(folder)
+    session = _get_number(folder)
 
     session_folder = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
     )
-    trial = str(int(_get_trial(session_folder)) + 1)
+    trial = str(_get_number(session_folder) + 1)
 
     trial_folder = _make_folder(
         arg["folder"],
@@ -682,8 +497,10 @@ def create_trial(arg: dict[str, str | bool]) -> None:
     )
 
     if arg["player_trajectory"] == True:
-        filename = _make_filename(str(session), trial, arg["scene"])
-        header = _make_header()
+        filename = _make_filename(
+            str(session), trial, arg["scene"], "trajectory"
+        )
+        header = _make_header("trajectory")
         _make_csv(trial_folder, filename, header)
         print("Created the file " + filename)
 
@@ -692,20 +509,7 @@ def create_trial(arg: dict[str, str | bool]) -> None:
             wheels[key].start_streaming()
             print("Streaming started for wheel: " + wheels[key].IP)
 
-        wheel_file = (
-            "S"
-            + str(session)
-            + "_"
-            + str(date.today())
-            + "_"
-            + "T"
-            + trial
-            + "_"
-            + arg["scene"]
-        )
-
-        _create_wheels(os.path.join(trial_folder, wheel_file))
-        _event_wheels(trial_folder, wheel_file, "stream_start", arg["time"])
+        _create_wheels(trial_folder, session, trial, arg["scene"])
 
 
 def save_data(
@@ -734,28 +538,31 @@ def save_data(
     -------
     None
     """
-    trial = _get_trial(
+    trial = _get_number(
         os.path.join(arg["folder"], arg["participant"], str(date.today()))
     )
-    trial_files, trial_basename = _find_files(
-        arg["folder"], arg["scene"], arg["participant"], str(trial)
+    session = _get_number(os.path.join(arg["folder"], arg["participant"]))
+    trial_folder = _make_folder(
+        arg["folder"],
+        arg["participant"],
+        session=str(date.today()),
+        trial="T" + str(trial),
     )
+
+    trajectory_file = _make_filename(
+        str(session), str(trial), arg["scene"], "trajectory"
+    )
+
     trajectory_data = {key: arg[key] for key in trajectory if key in arg}
 
     if (trajectory_data[trajectory[1]] is not None) or (
         trajectory_data[trajectory[2]] is not None
     ):
-        _save_trajectory(trial_basename, trajectory_data)
-
-    if arg["instrumented_wheels"] == True:
-        session = _get_session(os.path.join(arg["folder"], arg["participant"]))
-        trial_folder = _make_folder(
-            arg["folder"],
-            arg["participant"],
-            session=str(date.today()),
-            trial="T" + str(trial),
+        _save_trajectory(
+            os.path.join(trial_folder, trajectory_file), trajectory_data
         )
 
+    if arg["instrumented_wheels"] == True:
         for key in wheels.keys():
             _save_wheels(
                 str(session), trial_folder, arg["scene"], str(trial), side=key
@@ -788,13 +595,12 @@ def end_log(
     -------
     None
     """
-
     folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_session(folder)
+    session = _get_number(folder)
     session_folder = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
     )
-    trial = _get_trial(session_folder)
+    trial = _get_number(session_folder)
     trial_folder = _make_folder(
         arg["folder"],
         arg["participant"],
@@ -803,17 +609,12 @@ def end_log(
     )
 
     if arg["instrumented_wheels"] == True:
-        wheel_file = _stop_wheels(
+        _stop_wheels(
             str(session),
             trial_folder,
             str(trial),
             arg["scene"],
             arg["time"],
-            wheels=wheels,
-        )
-        _convert_wheels(
-            wheel_file,
-            trial_folder,
             wheels=wheels,
         )
 
@@ -824,41 +625,18 @@ if __name__ == "__main__":
     arg = {
         "folder": r"D:\Maria_school\Documents\S2026\data",
         "participant": "test",
-        "time": "0000000000.000",
-        "instrumented_wheels": False,
-        "motion_capture": False,
-    }
-    start_log(arg, wheels=wheels)
-
-    arg = {
-        "folder": r"D:\Maria_school\Documents\S2026\data",
-        "participant": "test",
         "scene": "scene",
         "time": "0000000000.000",
         "player_trajectory": True,
         "instrumented_wheels": False,
         "motion_capture": False,
-    }
-    create_trial(arg)
-
-    arg = {
-        "folder": r"D:\Maria_school\Documents\S2026\data",
-        "participant": "test",
-        "scene": "scene",
-        "instrumented_wheels": False,
-        "time": "0000000000.000",
         "position": "(0,0,0)",
         "rotation": "(0,0,0)",
     }
+    start_log(arg, wheels=wheels)
+
+    create_trial(arg)
 
     save_data(arg)
 
-    arg = {
-        "folder": r"D:\Maria_school\Documents\S2026\data",
-        "participant": "test",
-        "scene": "scene",
-        "time": "0000000000.000",
-        "instrumented_wheels": False,
-        "motion_capture": False,
-    }
     end_log(arg, wheels=wheels)

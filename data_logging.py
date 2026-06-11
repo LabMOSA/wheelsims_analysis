@@ -221,6 +221,7 @@ def _create_wheels(
         "Encoder",
         "Power",
     ],
+    side: str | None = "right",
 ) -> None:
     """
     Create and save CSV files to hold instrumented wheels data and events.
@@ -238,6 +239,9 @@ def _create_wheels(
     wheel_data : optional
         The different types of wheel data that can be saved.
         The default is ["Analog", "IMU", "Encoder", "Power"].
+    side : optional
+        The specific wheel for which recording must be stopped.
+        The default is "right".
 
     Returns
     -------
@@ -245,7 +249,9 @@ def _create_wheels(
     """
     for key in wheel_data:
         header = _make_header(key)
-        filename = _make_filename(str(session), str(trial), scene, key)
+        filename = _make_filename(
+            str(session), str(trial), scene, side + "_" + key
+        )
         _make_csv(trial_folder, filename, header)
 
 
@@ -330,8 +336,7 @@ def _save_wheels(
     nw = wheels[side].fetch(clear=True)
 
     for key in nw.keys():
-        filename = _make_filename(session, trial, scene, key)
-
+        filename = _make_filename(session, trial, scene, side + "_" + key)
         data_lines = np.column_stack(
             [nw[key].time]
             + [nw[key].data[subkey] for subkey in nw[key].data.keys()]
@@ -376,26 +381,14 @@ def _stop_wheels(
 
     Returns
     -------
-    wheel_file :
-        Basename of files pertaining to instrumented wheels for current trial.
+    None
     """
-    wheel_file = (
-        "S"
-        + str(session)
-        + "_"
-        + str(date.today())
-        + "_T"
-        + trial
-        + "_"
-        + scene
-    )
-
     for key in wheels.keys():
         wheels[key].stop_streaming()
-        _save_wheels(session, trial_folder, scene, trial, side=key)
+        _save_wheels(
+            session, trial_folder, scene, trial, side=key, wheels=wheels
+        )
         print("Successfully stopped stream from wheel: " + wheels[key].IP)
-
-    return wheel_file
 
 
 # %% Public functions
@@ -461,7 +454,10 @@ def start_log(
                 )
 
 
-def create_trial(arg: dict[str, str | bool]) -> None:
+def create_trial(
+    arg: dict[str, str | bool],
+    wheels: dict[NextWheel, NextWheel] | None = wheels,
+) -> None:
     """
     Create empty files where data will be saved during this current trial.
 
@@ -476,6 +472,10 @@ def create_trial(arg: dict[str, str | bool]) -> None:
             "player_trajectory": bool, whether to save the player's position.
             "instrumented_wheels": bool, whether to save the wheels.
             "motion_capture": bool,  whether to save the motion capture.
+    wheels : optional
+        The two instances of NextWheel created (corresponding to the right and
+        the left wheels) when data_logging is imported.
+        The default is the global variable wheels.
 
     Returns
     -------
@@ -514,6 +514,7 @@ def create_trial(arg: dict[str, str | bool]) -> None:
 
 def save_data(
     arg: dict[str, str | bool],
+    wheels: dict[NextWheel, NextWheel] | None = wheels,
     trajectory: list[str] | None = ["time", "position", "rotation"],
 ) -> None:
     """
@@ -533,6 +534,10 @@ def save_data(
     trajectory : optional
         The different data types related to the trajectory to be saved.
         The default is ["time", "position", "rotation"].
+    wheels : optional
+        The two instances of NextWheel created (corresponding to the right and
+        the left wheels) when data_logging is imported.
+        The default is the global variable wheels.
 
     Returns
     -------
@@ -565,7 +570,12 @@ def save_data(
     if arg["instrumented_wheels"] == True:
         for key in wheels.keys():
             _save_wheels(
-                str(session), trial_folder, arg["scene"], str(trial), side=key
+                str(session),
+                trial_folder,
+                arg["scene"],
+                str(trial),
+                side=key,
+                wheels=wheels,
             )
 
 
@@ -619,24 +629,3 @@ def end_log(
         )
 
     print("Logging is done for current session: ", trial_folder)
-
-
-if __name__ == "__main__":
-    arg = {
-        "folder": r"D:\Maria_school\Documents\S2026\data",
-        "participant": "test",
-        "scene": "scene",
-        "time": "0000000000.000",
-        "player_trajectory": True,
-        "instrumented_wheels": False,
-        "motion_capture": False,
-        "position": "(0,0,0)",
-        "rotation": "(0,0,0)",
-    }
-    start_log(arg, wheels=wheels)
-
-    create_trial(arg)
-
-    save_data(arg)
-
-    end_log(arg, wheels=wheels)

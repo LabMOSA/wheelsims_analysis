@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+echo "========================================"
+echo "Reformatting files to Black Coding Style"
+echo "========================================"
+black .
+
+echo "========================================"
+echo "Checking Static Types (mypy)"
+echo "========================================"
+mypy .
+
+echo "========================================"
+echo "Checking General Code Quality (pylint)"
+echo "========================================"
+pylint .
+
+echo "========================================"
+echo "Running Unit Tests (pytest)"
+echo "========================================"
+pytest tests

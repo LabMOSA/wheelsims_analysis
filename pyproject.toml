@@ -1,0 +1,16 @@
+[tool.black]
+line-length = 79
+
+[[tool.mypy.overrides]]
+module = ["kineticstoolkit.*"]
+follow_untyped_imports = true
+
+[tool.pylint]
+load-plugins = ["pylint.extensions.docparams"]
+
+[tool.pylint.MASTER]
+ignore = [
+	"DataDescriptions.py",
+	"MoCapData.py",
+	"NatNetClient.py",
+]

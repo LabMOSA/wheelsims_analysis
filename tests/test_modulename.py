@@ -6,7 +6,6 @@ modify test_functionname and maybe add other test functions.
 
 """
 
-
 def test_functionname():
     """
     Test functionname.

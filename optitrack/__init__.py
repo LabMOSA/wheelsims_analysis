@@ -38,7 +38,7 @@ FRAME_LIMIT = 10000
 
 # Initialize empty lists to store positions, orientations and timestamps
 _data: dict[int, dict[str, list]] = {}
-ts = {}
+ts: dict[str, ktk.TimeSeries] = {}
 
 # Global variable for the NatNet client
 _streaming_client = NatNetClient()
@@ -102,7 +102,6 @@ def fetch() -> dict[str, ktk.TimeSeries]:
     dict[str, ktk.TimeSeries]
 
     """
-
     for key, value in _data.items():
 
         n_samples = min(

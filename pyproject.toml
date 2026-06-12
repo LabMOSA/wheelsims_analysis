@@ -8,7 +8,6 @@ exclude = [
 	"NatNetClient.py",
 ]
 
-
 [[tool.mypy.overrides]]
 module = ["kineticstoolkit.*"]
 follow_untyped_imports = true
@@ -19,6 +18,13 @@ output-format = ["colorized"]
 
 [tool.pylint.MASTER]
 ignore = [
+	"DataDescriptions.py",
+	"MoCapData.py",
+	"NatNetClient.py",
+]
+
+[tool.coverage.run]
+omit = [
 	"DataDescriptions.py",
 	"MoCapData.py",
 	"NatNetClient.py",

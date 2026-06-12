@@ -54,7 +54,7 @@ COMMAND_MAPPING = {
 
 
 def _init_udp_socket():
-    """Initialize the UDP sockets"""
+    """Initialize the UDP sockets."""
     if _private_vars["sock"] == None:
 
         _private_vars["sock"] = socket.socket(
@@ -70,12 +70,9 @@ def _init_udp_socket():
 def send_data(command, data):
     """Encode data to JSON and send it via UDP."""
     _init_udp_socket()
-    
-    message = {
-        "command": command, 
-        "data": data
-    }
- 
+
+    message = {"command": command, "data": data}
+
     json_message = json.dumps(message).encode("utf-8")
     _private_vars["sock"].sendto(json_message, (UDP_IP, GODOT_PORT))
 
@@ -124,9 +121,10 @@ if __name__ == "__main__":
                 break
             except ConnectionResetError:
                 break
-        
+
         # Do not execute repeating commands after shutdown request
-        if not _private_vars["is_running"]: break
+        if not _private_vars["is_running"]:
+            break
 
         # Execute every repeating command
         for command in _running_commands:

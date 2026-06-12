@@ -1003,9 +1003,11 @@ class NatNetClient:
         return offset, frame_suffix_data
 
     # Unpack data from a motion capture frame message
-    def __unpack_mocap_data(self, data: bytes, packet_size, major, minor):
+    def __unpack_mocap_data(
+        self, data_bytes: bytes, packet_size, major, minor
+    ):
         mocap_data = MoCapData.MoCapData()
-        data = memoryview(data)
+        data = memoryview(data_bytes)
         offset = 0
         rel_offset = 0
 

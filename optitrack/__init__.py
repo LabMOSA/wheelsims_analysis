@@ -14,7 +14,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 Module that receives a multiple streamed rigid bodies from Optitrack.
 
@@ -86,7 +85,8 @@ def receive_rigid_body_frame(
 
 def fetch() -> dict[str, ktk.TimeSeries]:
     """
-    Get the trajectory of all received rigid bodies as TimeSeries of transforms.
+    Get the trajectory of all received rigid bodies as TimeSeries of
+    transforms.
 
     Returns a dictionary of TimeSeries where each key is the ID of the rigid
     body in Motive, and the TimeSeries contains one transform series. The max

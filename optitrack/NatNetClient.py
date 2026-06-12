@@ -150,7 +150,8 @@ class NatNetClient:
         return self.__can_change_bitstream_version
 
     def set_nat_net_version(self, major, minor):
-        """checks to see if stream version can change, then changes it with position reset"""
+        """Checks to see if stream version can change, then changes it with
+        position reset."""
         return_code = -1
         if self.__can_change_bitstream_version and (
             (major != self.__nat_net_requested_version[0])

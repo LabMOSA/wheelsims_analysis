@@ -348,7 +348,7 @@ class ForcePlateDescription:
         return len(self.channel_list)
 
     def get_cal_matrix_as_string(self, tab_str="", level=0):
-        """Get force plate calibration matrix as string"""
+        """Get force plate calibration matrix as string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_tab_str2 = get_tab_str(tab_str, level + 1)
         out_string = ""
@@ -376,7 +376,7 @@ class ForcePlateDescription:
         return out_string
 
     def get_corners_as_string(self, tab_str="", level=0):
-        """Get force plate corner positions as a string"""
+        """Get force plate corner positions as a string."""
         # Corners 4x3 floats
         out_tab_str = get_tab_str(tab_str, level)
         out_tab_str2 = get_tab_str(tab_str, level + 1)
@@ -393,7 +393,7 @@ class ForcePlateDescription:
         return out_string
 
     def get_as_string(self, tab_str="  ", level=0):
-        """Get force plate description as a class"""
+        """Get force plate description as a class."""
         out_tab_str = get_tab_str(tab_str, level)
         out_string = ""
         out_string += "%sID                      : %d\n" % (
@@ -447,7 +447,7 @@ class ForcePlateDescription:
 
 
 class DeviceDescription:
-    """Device Description class"""
+    """Device Description class."""
 
     def __init__(
         self, new_id, name, serial_number, device_type, channel_data_type
@@ -460,20 +460,20 @@ class DeviceDescription:
         self.channel_list = []
 
     def set_id(self, new_id):
-        """Set the device id"""
+        """Set the device id."""
         self.id_num = new_id
 
     def set_name(self, name):
-        """Set the Device name"""
+        """Set the Device name."""
         self.name = name
 
     def add_channel_name(self, channel_name):
-        """Add channel name to channel_list"""
+        """Add channel name to channel_list."""
         self.channel_list.append(channel_name)
         return len(self.channel_list)
 
     def get_as_string(self, tab_str="  ", level=0):
-        """Get Device Description as string"""
+        """Get Device Description as string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_tab_str2 = get_tab_str(tab_str, level + 1)
         out_string = ""
@@ -512,7 +512,7 @@ class DeviceDescription:
 
 
 class CameraDescription:
-    """Camera Description class"""
+    """Camera Description class."""
 
     def __init__(self, name, position_vec3, orientation_quat):
         self.name = name
@@ -520,7 +520,7 @@ class CameraDescription:
         self.orientation = orientation_quat
 
     def get_as_string(self, tab_str="..", level=0):
-        """Get Camera Description as a string"""
+        """Get Camera Description as a string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_string = ""
         out_string += "%sName        : %s\n" % (
@@ -544,7 +544,7 @@ class CameraDescription:
 
 
 class MarkerDescription:
-    """Marker Description class"""
+    """Marker Description class."""
 
     def __init__(self, name, marker_id, position, marker_size, marker_params):
         self.name = name
@@ -554,7 +554,7 @@ class MarkerDescription:
         self.marker_params = marker_params
 
     def get_as_string(self, tab_str="..", level=0):
-        """Get Marker Description as a string"""
+        """Get Marker Description as a string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_string = ""
         out_string += "%sName        : %s\n" % (
@@ -581,7 +581,7 @@ class MarkerDescription:
 
 
 class AssetDescription:
-    """Asset Description class"""
+    """Asset Description class."""
 
     def __init__(self, name, assetType, assetID, rigidbodyArray, markerArray):
         self.name = name
@@ -591,7 +591,7 @@ class AssetDescription:
         self.markerArray = markerArray
 
     def get_as_string(self, tab_str="..", level=0):
-        """Get Asset Description as a string"""
+        """Get Asset Description as a string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_string = ""
         # out_string += "Asset Description\n"
@@ -628,7 +628,7 @@ class AssetDescription:
 # cDataDescriptions
 # Full data descriptions
 class DataDescriptions:
-    """Data Descriptions class"""
+    """Data Descriptions class."""
 
     order_num = 0
 
@@ -643,7 +643,8 @@ class DataDescriptions:
         self.camera_list = []
 
     def generate_order_name(self):
-        """Generate the name for the order list based on the current length of the list"""
+        """Generate the name for the order list based on the current length of
+        the list."""
         # should be a one up counter instead of based on length of data_order_dict
         order_name = "data_%3.3d" % self.order_num
         self.order_num += 1
@@ -651,7 +652,7 @@ class DataDescriptions:
 
     # Add Markerset
     def add_marker_set(self, new_marker_set):
-        """Add a Markerset"""
+        """Add a Markerset."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -661,7 +662,7 @@ class DataDescriptions:
 
     # Add Rigid Body
     def add_rigid_body(self, new_rigid_body):
-        """Add a rigid body"""
+        """Add a rigid body."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -671,7 +672,7 @@ class DataDescriptions:
 
     # Add a skeleton
     def add_skeleton(self, new_skeleton):
-        """Add a skeleton"""
+        """Add a skeleton."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -681,7 +682,7 @@ class DataDescriptions:
 
     # Add an asset
     def add_asset(self, new_asset):
-        """Add an asset"""
+        """Add an asset."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -691,7 +692,7 @@ class DataDescriptions:
 
     # Add a force plate
     def add_force_plate(self, new_force_plate):
-        """Add a force plate"""
+        """Add a force plate."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -709,7 +710,7 @@ class DataDescriptions:
         self.device_list.append(copy.deepcopy(newdevice))
 
     def add_camera(self, newcamera):
-        """Add a new camera"""
+        """Add a new camera."""
         order_name = self.generate_order_name()
 
         # generate order entry
@@ -718,7 +719,7 @@ class DataDescriptions:
         self.camera_list.append(copy.deepcopy(newcamera))
 
     def add_data(self, new_data):
-        """Add data based on data type"""
+        """Add data based on data type."""
         data_type = type(new_data)
         if data_type == MarkerSetDescription:
             self.add_marker_set(new_data)
@@ -740,7 +741,7 @@ class DataDescriptions:
             print("ERROR: Type %s unknown" % str(data_type))
 
     def get_object_from_list(self, list_name, pos_num):
-        """Determine list name and position of the object"""
+        """Determine list name and position of the object."""
         ret_value = None
         if (list_name == "marker_set_list") and (
             pos_num < len(self.marker_set_list)
@@ -781,7 +782,7 @@ class DataDescriptions:
         return ret_value
 
     def get_as_string(self, tab_str="  ", level=0):
-        """Ensure data comes back as a string"""
+        """Ensure data comes back as a string."""
         out_tab_str = get_tab_str(tab_str, level)
         out_tab_str2 = get_tab_str(tab_str, level + 1)
         out_tab_str3 = get_tab_str(tab_str, level + 2)
@@ -860,7 +861,8 @@ def generate_rigid_body_description(rbd_num=0):
 
 
 def generate_skeleton_description(skeleton_num=0):
-    """generate_skeleton_description -Generate Test SkeletonDescription Data"""
+    """generate_skeleton_description -Generate Test SkeletonDescription
+    Data."""
     skel_desc = SkeletonDescription(
         "SkeletonDescription_%3.3d" % skeleton_num, skeleton_num
     )
@@ -905,7 +907,7 @@ def generate_force_plate_description(force_plate_num=0):
 
 
 def generate_device_description(dev_num=0):
-    """generate_device_description- Generate Test DeviceDescription Data"""
+    """generate_device_description- Generate Test DeviceDescription Data."""
     new_id = 0
     name = "Device%3.3d" % dev_num
     serial_number = "SerialNumber%3.3d" % dev_num
@@ -930,7 +932,7 @@ def generate_camera_description(cam_num=0):
 
 # generate_data_descriptions - Generate Test DataDescriptions
 def generate_data_descriptions(data_desc_num=0):
-    """Generate data descriptions"""
+    """Generate data descriptions."""
     data_descs = DataDescriptions()
 
     data_descs.add_data(generate_marker_set_description(data_desc_num + 0))
@@ -966,7 +968,7 @@ def generate_data_descriptions(data_desc_num=0):
 
 # test_all - Test all the major classes
 def test_all(run_test=True):
-    """Test all the Data Description classes"""
+    """Test all the Data Description classes."""
     totals = [0, 0, 0]
     if run_test is True:
         test_cases = [

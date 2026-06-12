@@ -5,5 +5,5 @@ This is a repository of different analysis modules and scripts (mostly in Python
 Developers should install these modules to be able to run `check_code_quality.py` before asking a code review:
 
 ```
-conda install -c conda-forge black pytest coverage pylint mypy
+conda install -c conda-forge black docformatter pytest coverage pylint mypy
 ```

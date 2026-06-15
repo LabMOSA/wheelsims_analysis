@@ -1,0 +1,34 @@
+name: run_tests
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "**" ]
+  schedule:
+     - cron: "15 0 1,6,11,16,21,26 * *"
+  workflow_dispatch:
+  
+jobs:
+  unittests:
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    runs-on: ubuntu-latest
+        
+    steps:
+    - uses: actions/checkout@v4
+    - id: install-python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        pip install kineticstoolkit black docformatter pytest coverage pylint mypy
+    - name: Test formatting
+      run: black --check
+    - name: Test with pytest and crash on warnings
+      run: |
+        pytest tests -W error::RuntimeWarning

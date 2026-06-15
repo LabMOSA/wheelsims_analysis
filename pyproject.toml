@@ -1,0 +1,31 @@
+[tool.black]
+line-length = 79
+
+[tool.mypy]
+exclude = [
+	"DataDescriptions.py",
+	"MoCapData.py",
+	"NatNetClient.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["kineticstoolkit.*"]
+follow_untyped_imports = true
+
+[tool.pylint]
+load-plugins = ["pylint.extensions.docparams"]
+output-format = ["colorized"]
+
+[tool.pylint.MASTER]
+ignore = [
+	"DataDescriptions.py",
+	"MoCapData.py",
+	"NatNetClient.py",
+]
+
+[tool.coverage.run]
+omit = [
+	"DataDescriptions.py",
+	"MoCapData.py",
+	"NatNetClient.py",
+]

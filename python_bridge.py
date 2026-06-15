@@ -59,7 +59,7 @@ COMMAND_MAPPING = {
 
 
 def _init_udp_socket():
-    """Initialize the UDP sockets"""
+    """Initialize the UDP sockets."""
     if _private_vars["sock"] == None:
 
         _private_vars["sock"] = socket.socket(

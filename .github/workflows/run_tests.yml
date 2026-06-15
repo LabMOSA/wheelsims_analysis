@@ -28,7 +28,7 @@ jobs:
       run: |
         pip install kineticstoolkit black docformatter pytest coverage pylint mypy
     - name: Test formatting
-      run: black --check
+      run: black --check .
     - name: Test with pytest and crash on warnings
       run: |
         pytest tests -W error::RuntimeWarning

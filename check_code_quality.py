@@ -15,7 +15,6 @@ def _run_and_print(command: list[str]) -> None:
         error_output: str = (e.output or b"").decode()
         for line in error_output.split("\n"):
             print(line)
-        return
 
 
 def run_style_formatter() -> None:  # pragma: no cover

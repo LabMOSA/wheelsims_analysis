@@ -4,32 +4,35 @@ import matplotlib.pyplot as plt
 import time
 import optitrack as ot
 
-
 results = {
     "run_mode": "stop",
     "data": None,
     "current_window_data": None,
-    "cycles": {"left": [],"right": []},
-    "new_cycle_log": {"left": 1,"right": 1},
-    "new_cycle_send": {"left": 3,"right": 3},
+    "cycles": {"left": [], "right": []},
+    "new_cycle_log": {"left": 1, "right": 1},
+    "new_cycle_send": {"left": 3, "right": 3},
     "ts_full": None,
-    }
+}
 
-    
+
 def biofeedback_stop(arg):
     """
     Clear all data.
-    Stop the module optitrack and clear the ot data.
-    Display the full kinematics and push pattern graphics (by default is commented)
+
+    Stop the module optitrack and clear the ot data. Display the full
+    kinematics and push pattern graphics (by default is commented)
+
     """
-    
+
     try:
-    
+
         # Display full kinematics and push pattern graphics at script termination.
         # Reconstructs the global session dataset (limit_duration=0) and injects
         # the complete accumulated cycle history for both sides.
-        
-        data_cycles = analyze_current_window(results["data"], arg, {"left": [],"right": []}, limit_duration=0)
+
+        data_cycles = analyze_current_window(
+            results["data"], arg, {"left": [], "right": []}, limit_duration=0
+        )
         data_cycles["left"]["cycles"] = results["cycles"]["left"]
         data_cycles["right"]["cycles"] = results["cycles"]["right"]
 
@@ -43,31 +46,32 @@ def biofeedback_stop(arg):
 
     except Exception as e:
         print(f"Display full kinematics and push pattern : {e}")
-    
-    results.clear()    
+
+    results.clear()
     results.update(init_results())
 
     ot.stop()
     ot.clear()
-    
+
     print("Biofeedback closed")
-    
-    plt.show()    
-    
+
+    plt.show()
+
+
 def biofeedback_update(arg):
     """
     Execute a real-time update iteration for the biofeedback.
 
-    Handles the live streaming state machine: initializes the OptiTrack acquisition 
-    on startup, fetches new tracking frames, extracts and filters side-specific 
-    kinematics, detects propulsion cycles, logs progress, and streams computed 
+    Handles the live streaming state machine: initializes the OptiTrack acquisition
+    on startup, fetches new tracking frames, extracts and filters side-specific
+    kinematics, detects propulsion cycles, logs progress, and streams computed
     metrics to Godot.
+
     """
 
     def update_data_cycles(cycles, current_window_data):
-        """
-        Updates the global cycle history with newly detected propulsion cycles.
-        """
+        """Updates the global cycle history with newly detected propulsion
+        cycles."""
 
         try:
             for side in ["left", "right"]:
@@ -95,31 +99,48 @@ def biofeedback_update(arg):
         return cycles
 
     def send_data_godot(new_cycle_send, cycles):
-        """
-        Compute and send to Godot the median push frequency and the last 3 normalized push patterns whenever a new cycle is detected
-        """
-        
+        """Compute and send to Godot the median push frequency and the last 3
+        normalized push patterns whenever a new cycle is detected."""
+
         from python_bridge import send_data
 
         for side in ["left", "right"]:
 
-            if len(cycles[side]) >= 3 and len(cycles[side]) == new_cycle_send[side]:
+            if (
+                len(cycles[side]) >= 3
+                and len(cycles[side]) == new_cycle_send[side]
+            ):
 
-                mean_push_frequency = float(np.median([
-                    cycles[side][-1]["push_frequency"],
-                    cycles[side][-2]["push_frequency"],
-                    cycles[side][-3]["push_frequency"],
-                                            ]))
+                mean_push_frequency = float(
+                    np.median(
+                        [
+                            cycles[side][-1]["push_frequency"],
+                            cycles[side][-2]["push_frequency"],
+                            cycles[side][-3]["push_frequency"],
+                        ]
+                    )
+                )
 
-                last_push_pattern_1 = cycles[side][-1]["normalised_push_pattern"].tolist()
-                last_push_pattern_2 = cycles[side][-2]["normalised_push_pattern"].tolist()
-                last_push_pattern_3 = cycles[side][-3]["normalised_push_pattern"].tolist()
+                last_push_pattern_1 = cycles[side][-1][
+                    "normalised_push_pattern"
+                ].tolist()
+                last_push_pattern_2 = cycles[side][-2][
+                    "normalised_push_pattern"
+                ].tolist()
+                last_push_pattern_3 = cycles[side][-3][
+                    "normalised_push_pattern"
+                ].tolist()
 
-                data = {"data": {side: {"mean_push_frequency": mean_push_frequency,
-                                        "last_push_pattern_1": last_push_pattern_1,
-                                        "last_push_pattern_2": last_push_pattern_2,
-                                        "last_push_pattern_3": last_push_pattern_3,
-                                        }}}
+                data = {
+                    "data": {
+                        side: {
+                            "mean_push_frequency": mean_push_frequency,
+                            "last_push_pattern_1": last_push_pattern_1,
+                            "last_push_pattern_2": last_push_pattern_2,
+                            "last_push_pattern_3": last_push_pattern_3,
+                        }
+                    }
+                }
 
                 send_data(data)
 
@@ -130,7 +151,11 @@ def biofeedback_update(arg):
     def print_log(new_cycle_log, cycles, current_window_data):
         """
         Display push data when a cycle is detected.
-        (ex) side : push n°X | execution duration: X.XXXXXX | time windowed: X.XX | push frequency: X.XX | Push Pattern: last [X, Y, Z]
+
+        (ex) side : push n°X | execution duration: X.XXXXXX | time
+        windowed: X.XX | push frequency: X.XX | Push Pattern: last [X,
+        Y, Z]
+
         """
 
         try:
@@ -139,9 +164,14 @@ def biofeedback_update(arg):
                 if len(cycles[side]) == new_cycle_log[side]:
 
                     push_frequency = cycles[side][-1]["push_frequency"]
-                    push_pattern = cycles[side][-1]["normalised_push_pattern"][-1]
+                    push_pattern = cycles[side][-1]["normalised_push_pattern"][
+                        -1
+                    ]
 
-                    duration_cycle_analized = current_window_data[side]["ts"].time[-1] - current_window_data[side]["ts"].time[0]
+                    duration_cycle_analized = (
+                        current_window_data[side]["ts"].time[-1]
+                        - current_window_data[side]["ts"].time[0]
+                    )
 
                     print(
                         f"{f'{side}':<8} "
@@ -158,48 +188,56 @@ def biofeedback_update(arg):
             print(f"print_log : {e}")
 
         return new_cycle_log
-    
+
     if results["run_mode"] == "stop":
-        
+
         ot.start()
 
         time.sleep(1)
 
         print("Biofeedback started")
-        
+
         results["run_mode"] = "start"
-    
+
     elif results["run_mode"] == "start":
-    
+
         debut = time.time()
-    
+
         try:
             results["data"] = ot.fetch()
         except Exception as e:
             print(e)
-        
+
         if not results["data"]:
             return
 
         fin = time.time()
-        
-        results["current_window_data"] = analyze_current_window(results["data"], arg, results["cycles"], limit_duration=5)
-        results["cycles"] = update_data_cycles(results["cycles"], results["current_window_data"])
-        
-        results["new_cycle_send"] = send_data_godot(results["new_cycle_send"], results["cycles"])
-        
-        results["new_cycle_log"] = print_log(results["new_cycle_log"], results["cycles"], results["current_window_data"])
+
+        results["current_window_data"] = analyze_current_window(
+            results["data"], arg, results["cycles"], limit_duration=5
+        )
+        results["cycles"] = update_data_cycles(
+            results["cycles"], results["current_window_data"]
+        )
+
+        results["new_cycle_send"] = send_data_godot(
+            results["new_cycle_send"], results["cycles"]
+        )
+
+        results["new_cycle_log"] = print_log(
+            results["new_cycle_log"],
+            results["cycles"],
+            results["current_window_data"],
+        )
+
 
 def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
-    """
-    Extracts kinematics and validated propulsion cycles from the current time window
-    """
+    """Extracts kinematics and validated propulsion cycles from the current
+    time window."""
 
     def initialize_data_side():
-
-        """
-        Initializes and structures calibration coordinates for both sides.
-        """
+        """Initializes and structures calibration coordinates for both
+        sides."""
 
         # Get and convert coordinates to homogeneous arrays [X, Y, Z, 1.0]
         coordinates_left_wheel_center = np.array(
@@ -235,9 +273,8 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
         return data_side
 
     def data_windowed(data, limit_duration):
-        """
-        Slices the lastest N seconds of the time series to optimize real-time processing
-        """
+        """Slices the lastest N seconds of the time series to optimize real-
+        time processing."""
 
         data_windowed = {}
 
@@ -255,9 +292,8 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
         return data_windowed
 
     def compute_local_kinematics(data_windowed, data_side, n):
-        """
-        Transforms timeseries tracking data into filtered local kinematics for a single side.
-        """
+        """Transforms timeseries tracking data into filtered local kinematics
+        for a single side."""
 
         # Extract side-specific configuration and streaming tracking ID
         id_streaming = data_side[n]["id_streaming"]
@@ -307,9 +343,8 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
         return ts, side
 
     def detect_push_cycles(ts, side, prev_data_cycles):
-        """
-        Detects voluntary propulsion cycles from position time series based on kinematic and temporal criteria
-        """
+        """Detects voluntary propulsion cycles from position time series based
+        on kinematic and temporal criteria."""
 
         pos_x = ts.data[f"Meta2{side}"][:, 0]
         vel_x = ts.data[f"Meta2{side}_df"]
@@ -354,13 +389,14 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
 
                 if delta_t > 0.4:
 
-
                     ts_cycle = ts.get_ts_between_times(t, t2)
                     ts_cycle.time = np.linspace(0, 100, len(ts_cycle.time))
 
                     ts_normalised = ts_cycle.resample(np.linspace(0, 100, 101))
 
-                    normalised_push_pattern = ts_normalised.data[f"Meta2{side}"][:, 0:3]
+                    normalised_push_pattern = ts_normalised.data[
+                        f"Meta2{side}"
+                    ][:, 0:3]
 
                     cycles.append(
                         {
@@ -377,7 +413,9 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
                                 "value": float(pos_x[index_t2]),
                             },
                             "range": float(pos_x[index_t1] - pos_x[index_t]),
-                            "velocity_max": float(np.nanmax(vel_x[index_t:index_t2])),
+                            "velocity_max": float(
+                                np.nanmax(vel_x[index_t:index_t2])
+                            ),
                             "push_frequency": float(1 / delta_t),
                             "normalised_push_pattern": normalised_push_pattern,
                         }
@@ -440,7 +478,7 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
             t0 = ts.get_index_at_time(cycles[r]["in_push"]["time"])
             t2 = ts.get_index_at_time(cycles[r]["end_push"]["time"])
 
-            segment = signal[t0: t2 + 1]
+            segment = signal[t0 : t2 + 1]
 
             crossed_up = False
             crossed_down = False
@@ -468,7 +506,7 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
     # Initialize the current window data
     current_window_data = {
         "left": {"ts": None, "cycles": None},
-        "right": {"ts": None, "cycles": None}
+        "right": {"ts": None, "cycles": None},
     }
 
     data_side = initialize_data_side()
@@ -489,9 +527,7 @@ def analyze_current_window(data, arg, prev_data_cycles, limit_duration=0):
 
 
 def plot_sides_kinematics(data_cycles):
-    """
-    Plot Position for both side
-    """
+    """Plot Position for both side."""
     plt.figure()
     plt.suptitle("Bilateral kinematics")
 
@@ -521,10 +557,9 @@ def plot_sides_kinematics(data_cycles):
 
         plt.tight_layout()
 
+
 def plot_side_kinematics(data_cycles, side):
-    """
-    Plot Position, velocity and acceleration for a single side
-    """
+    """Plot Position, velocity and acceleration for a single side."""
     plt.figure()
     plt.suptitle(f"Kinematics {side} side")
     plt.subplot(3, 1, 1)
@@ -554,11 +589,9 @@ def plot_side_kinematics(data_cycles, side):
 
     plt.tight_layout()
 
-def plot_side_push_pattern(arg, data_cycles, side):
-    """
-    Plot push pattern for a single side
-    """
 
+def plot_side_push_pattern(arg, data_cycles, side):
+    """Plot push pattern for a single side."""
 
     cycles = data_cycles[side]["cycles"]
     num_cycles = len(cycles)
@@ -581,8 +614,12 @@ def plot_side_push_pattern(arg, data_cycles, side):
 
         plt.figure(figsize=(15, n_rows * 2.5))
 
-
-        plt.suptitle(f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)", fontsize=14, weight='bold', y=0.98)
+        plt.suptitle(
+            f"push pattern {side} side | Page {page}/{total_pages} | ({num_cycles} cycles total)",
+            fontsize=14,
+            weight="bold",
+            y=0.98,
+        )
 
         for i, cycle in enumerate(page_cycles, start=1):
             ax = plt.subplot(n_rows, n_cols, i)
@@ -601,7 +638,9 @@ def plot_side_push_pattern(arg, data_cycles, side):
             ts = data_cycles[side]["ts"].get_ts_between_times(
                 cycle["in_push"]["time"], cycle["end_push"]["time"]
             )
-            ax.plot(ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1])
+            ax.plot(
+                ts.data[f"Meta2{side}"][:, 0], ts.data[f"Meta2{side}"][:, 1]
+            )
 
             ax.set_xlim(-0.8, 0.2)
             ax.set_ylim(0, 1.15)
@@ -611,30 +650,40 @@ def plot_side_push_pattern(arg, data_cycles, side):
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
+
 def init_results():
-    
+
     results = {
         "run_mode": "stop",
         "data": None,
         "current_window_data": None,
-        "cycles": {"left": [],"right": []},
-        "new_cycle_log": {"left": 1,"right": 1},
-        "new_cycle_send": {"left": 3,"right": 3},
+        "cycles": {"left": [], "right": []},
+        "new_cycle_log": {"left": 1, "right": 1},
+        "new_cycle_send": {"left": 3, "right": 3},
         "ts_full": None,
-        }
+    }
 
     return results
+
 
 if __name__ == "__main__":
 
     arg = {
-           "coordinates_left_wheel_center": [-0.504, 0.295, -0.779,],
-           "coordinates_right_wheel_center": [-0.500, 0.296, -0.204,],
-           "coordinates_left_hand": [0.081, -0.029, 0.082],
-           "coordinates_right_hand": [0.003, -0.145, 0.010],
-           "wheel_diameter": 0.54,
-           }
-    
+        "coordinates_left_wheel_center": [
+            -0.504,
+            0.295,
+            -0.779,
+        ],
+        "coordinates_right_wheel_center": [
+            -0.500,
+            0.296,
+            -0.204,
+        ],
+        "coordinates_left_hand": [0.081, -0.029, 0.082],
+        "coordinates_right_hand": [0.003, -0.145, 0.010],
+        "wheel_diameter": 0.54,
+    }
+
     try:
         while True:
             biofeedback_update(arg)

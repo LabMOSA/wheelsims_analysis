@@ -25,6 +25,7 @@ ignore = [
 
 [tool.coverage.run]
 omit = [
+	"tests/*",
 	"DataDescriptions.py",
 	"MoCapData.py",
 	"NatNetClient.py",

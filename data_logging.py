@@ -507,7 +507,7 @@ def create_trial(
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_number(folder) + 1
+    session = _get_number(folder)
 
     session_folder = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())

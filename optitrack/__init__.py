@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Copyright 2024-2026 Laboratoire de recherche en mobilité et systèmes adaptés
 
@@ -29,8 +28,10 @@ __license__ = "Apache 2.0"
 
 import sys
 import time
+
 import kineticstoolkit.lab as ktk
 import numpy as np
+
 from .NatNetClient import NatNetClient
 
 # Maximal number of frames to keep in memory
@@ -103,7 +104,6 @@ def fetch() -> dict[str, ktk.TimeSeries]:
 
     """
     for key, value in _data.items():
-
         n_samples = min(
             len(value["_times"]),
             len(value["_positions"]),

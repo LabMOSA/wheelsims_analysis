@@ -1,24 +1,25 @@
 """
-This Python script run the commands related to data logging called from the
-python bridge.
+Run the commands related to data logging called from the python bridge.
 
 Data logged includes the player's virtual position in the simulator, as
 well as information collected through the instrumented wheels.
 
 """
 
-import os
-from datetime import date
 import csv
 import glob
-from typing import TypedDict, Any, cast
-import numpy as np
+import os
+from datetime import date
+from typing import Any, TypedDict, cast
+
 import kineticstoolkit as ktk
+import numpy as np
+
 from nextwheel.software.python.nextwheel import NextWheel
 
 # %% Instrumented Wheels dictionary
 
-inst_wheels = {
+wheels = {
     "right": NextWheel(),
     # "left": NextWheel(),
 }
@@ -66,14 +67,14 @@ def _get_subset(arg: ArgStructure, keys: list[str]) -> dict[str, Any]:
 
     Parameters
     ----------
-    arg :
+    arg
         Dictionary containing arguments received from Godot.
-    keys :
+    keys
         List of keys to be extracted
 
     Returns
     -------
-    dict :
+    dict
         A generic dictionary containing the extracted data.
 
     """
@@ -99,18 +100,18 @@ def _make_folder(
 
     Parameters
     ----------
-    directory :
+    directory
         Base folder containing data for all participants.
-    participant :
+    participant
         Participant identifier number.
-    session : optional
-        Current session number.
-    trial: optional
-        Current trial number.
+    session
+        Optional. Current session number.
+    trial
+        Optional. Current trial number.
 
     Returns
     -------
-    folder :
+    str
         Folder specific to this participant (and/or session and trial).
 
     """
@@ -129,12 +130,12 @@ def _get_number(folder: str) -> int:
 
     Parameters
     ----------
-    folder :
+    folder
         Folder corresponding to current participant and/or session.
 
     Returns
     -------
-    session :
+    str
         Current session number.
 
     """
@@ -157,7 +158,7 @@ def _make_header(data_type: str) -> list[str]:
 
     Parameters
     ----------
-    data_type :
+    data_type
         The type of data to be saved from Simulator or instrumented wheels.
         Options are:
             Simulator (through Godot): trajectory.
@@ -165,7 +166,7 @@ def _make_header(data_type: str) -> list[str]:
 
     Returns
     -------
-    header :
+    list[str]
         Header to be used when creating the CSV file.
 
     """
@@ -180,7 +181,7 @@ def _make_header(data_type: str) -> list[str]:
 
 def _select_header(data_type: str) -> tuple[list[str], list[int]]:
     """
-    Selects the column titles and number of columns for the CSV file's header.
+    Select the column titles and number of columns for the CSV file's header.
 
     Parameters
     ----------
@@ -192,9 +193,9 @@ def _select_header(data_type: str) -> tuple[list[str], list[int]]:
 
     Returns
     -------
-    data_to_save :
+    data_to_save
         The specific column titles to be saved in the CSV file.
-    data_columns :
+    data_columns
         The number of columns per column title.
 
     """
@@ -240,10 +241,9 @@ def _make_filename(
             Simulator (through Godot): trajectory.
             NextWheel: Analog, IMU, Encoder, Power.
 
-
     Returns
     -------
-    file :
+    str
         Name of file to be created.
 
     """
@@ -271,11 +271,11 @@ def _make_csv(folder: str, filename: str, header: list[str]) -> None:
 
     Parameters
     ----------
-    folder :
+    folder
         Sub-folder corresponding to current participant.
-    filename :
+    filename
         Name of file to be created.
-    header :
+    header
         Header of file to be created.
 
     """
@@ -292,34 +292,25 @@ def _create_wheels(
     trial: int,
     scene: str,
     side: str,
-    wheel_data: list[str] = [
-        "Analog",
-        "IMU",
-        "Encoder",
-        "Power",
-    ],
 ) -> None:
     """
     Create and save CSV files to hold instrumented wheels data and events.
 
     Parameters
     ----------
-    trial_folder :
+    trial_folder
         The folder containing data for the current trial in-progress.
-    session :
+    session
         The current session number.
-    trial :
+    trial
         The current trial number.
-    scene :
+    scene
         The current playable scene selected.
-    side :
+    side
         The specific wheel for which recording must be stopped.
-    wheel_data : optional
-        The different types of wheel data that can be saved.
-        The default is ["Analog", "IMU", "Encoder", "Power"].
 
     """
-    for key in wheel_data:
+    for key in ["Analog", "IMU", "Encoder", "Power"]:
         header = _make_header(key)
         filename = _make_filename(
             str(session), str(trial), scene, side + "_" + key
@@ -336,9 +327,9 @@ def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
 
     Parameters
     ----------
-    filename :
+    filename
         Name of the file in which current trial's data is saved.
-    data_values :
+    data_values
         Current data values to save.
 
     """
@@ -367,35 +358,30 @@ def _save_wheels(
     scene: str,
     trial: str,
     side: str,
-    wheels: dict[str, NextWheel] = inst_wheels,
 ) -> None:
     """
     Open and append data to instrumented wheels data dictionary.
 
     Parameters
     ----------
-    nw:
+    nw
         Newly-fetched data from NextWheel.
-    session :
+    session
         Current session number.
-    trial_folder :
+    trial_folder
         Current trial folder.
-    scene :
+    scene
         The current scene.
-    trial :
+    trial
         The current trial number.
-    side :
+    side
         The specific wheel for which recording must be stopped.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
 
     """
-    for key in nw:
+    for key, ts in nw.items():
         filename = _make_filename(session, trial, scene, side + "_" + key)
         data_lines = np.column_stack(
-            [nw[key].time] + [nw[key].data[subkey] for subkey in nw[key].data]
+            [ts.time] + [ts.data[subkey] for subkey in ts.data]
         )
 
         with open(
@@ -413,7 +399,6 @@ def _stop_wheels(
     trial_folder: str,
     trial: str,
     scene: str,
-    wheels: dict[str, NextWheel] = inst_wheels,
 ) -> None:
     """
     Stop instrumented wheels streaming and catch final events.
@@ -428,25 +413,18 @@ def _stop_wheels(
         The current trial number.
     scene :
         The current scene.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
 
     """
-    for key in wheels:
-        wheels[key].stop_streaming()
-        nw = wheels[key].fetch(clear=True)
-        _save_wheels(
-            nw, session, trial_folder, scene, trial, side=key, wheels=wheels
-        )
-        print("Successfully stopped stream from wheel: " + wheels[key].IP)
+    for key, wheel in wheels.items():
+        wheel.stop_streaming()
+        nw = wheel.fetch(clear=True)
+        _save_wheels(nw, session, trial_folder, scene, trial, side=key)
+        print("Successfully stopped stream from wheel: " + wheel.IP)
 
 
 # %% Public functions
 def start_log(
     arg: ArgStructure,
-    wheels: dict[str, NextWheel] = inst_wheels,
     ip_addresses: dict[str, str] = {
         "right": "192.168.0.86",
         "left": "192.168.0.13",
@@ -457,15 +435,11 @@ def start_log(
 
     Parameters
     ----------
-    arg :
+    arg
         Dictionary containing arguments received from Godot.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
-    ip_addresses : optional
-        The two IP addresses corresponding to the right and the left wheels.
-        The default is {"right": "192.168.0.86", "left": "0.0.0.0"}
+    ip_addresses
+        Optional. The two IP addresses corresponding to the right and the left
+        wheels. The default is {"right": "192.168.0.86", "left": "0.0.0.0"}
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
@@ -475,35 +449,28 @@ def start_log(
     )
 
     if arg["instrumented_wheels"]:
-        for key in wheels:
+        for key, wheel in wheels.items():
             try:
-                wheels[key].IP = ip_addresses[key]
+                wheel.IP = ip_addresses[key]
                 print(
-                    "Successfully established connection to wheel: "
-                    + wheels[key].IP
+                    "Successfully established connection to wheel: " + wheel.IP
                 )
             except TimeoutError:
                 print(
-                    "Connection could not be established to wheel: "
-                    + wheels[key].IP
+                    "Connection could not be established to wheel: " + wheel.IP
                 )
 
 
 def create_trial(
     arg: ArgStructure,
-    wheels: dict[str, NextWheel] = inst_wheels,
 ) -> None:
     """
     Create empty files where data will be saved during this current trial.
 
     Parameters
     ----------
-    arg :
+    arg
         Dictionary containing arguments received from Godot.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
@@ -530,16 +497,15 @@ def create_trial(
         print("Created the file " + filename)
 
     if arg["instrumented_wheels"]:
-        for key in wheels:
-            wheels[key].start_streaming()
-            print("Streaming started for wheel: " + wheels[key].IP)
+        for key, wheel in wheels.items():
+            wheel.start_streaming()
+            print("Streaming started for wheel: " + wheel.IP)
 
             _create_wheels(trial_folder, session, trial, arg["scene"], key)
 
 
 def save_data(
     arg: ArgStructure,
-    wheels: dict[str, NextWheel] = inst_wheels,
     trajectory: list[str] = ["time", "position", "rotation"],
 ) -> None:
     """
@@ -547,15 +513,11 @@ def save_data(
 
     Parameters
     ----------
-    arg :
+    arg
         Dictionary containing arguments received from Godot.
-    trajectory : optional
+    trajectory
         The different data types related to the trajectory to be saved.
         The default is ["time", "position", "rotation"].
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
 
     """
     trial = _get_number(
@@ -583,8 +545,8 @@ def save_data(
         )
 
     if arg["instrumented_wheels"]:
-        for key in wheels:
-            nw = wheels[key].fetch(clear=True)
+        for key, value in wheels.items():
+            nw = value.fetch(clear=True)
             _save_wheels(
                 nw,
                 str(session),
@@ -598,19 +560,14 @@ def save_data(
 
 def end_log(
     arg: ArgStructure,
-    wheels: dict[str, NextWheel] = inst_wheels,
 ) -> None:
     """
     Confirm the end of recording and terminate instrumented wheels streaming.
 
     Parameters
     ----------
-    arg :
+    arg
         Dictionary containing arguments received from Godot.
-    wheels : optional
-        The two instances of NextWheel created (corresponding to the right and
-        the left wheels) when data_logging is imported.
-        The default is the global variable wheels.
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])

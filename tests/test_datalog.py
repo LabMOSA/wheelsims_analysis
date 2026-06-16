@@ -6,15 +6,15 @@ modify test_functionname and maybe add other test functions.
 
 """
 
+import os
+import shutil
+import sys
+import time
 from datetime import date, datetime
 
-import sys
-import os
-import time
-import shutil
+import kineticstoolkit as ktk
 import numpy as np
 import pandas as pd
-import kineticstoolkit as ktk
 
 sys.path.append(r"D:\Maria_school\Documents\S2026\wheelsims_analysis")
 import data_logging
@@ -58,9 +58,9 @@ def test_start_log():
     """Test start_log."""
     data_logging.start_log(arg)
 
-    assert os.path.isdir(
-        os.path.join(arg["folder"], arg["participant"])
-    ), f"TEST start_trial: Participant folder {arg['participant']} was not created."
+    assert os.path.isdir(os.path.join(arg["folder"], arg["participant"])), (
+        f"TEST start_trial: Participant folder {arg['participant']} was not created."
+    )
 
     assert os.path.isdir(
         os.path.join(arg["folder"], arg["participant"], str(date.today()))
@@ -78,21 +78,21 @@ def test_create_trial():
         os.path.join(arg["folder"], arg["participant"], str(date.today()))
     )
 
-    assert isinstance(
-        trial, int
-    ), f"TEST create_trial: Trial number {trial} must be an integer."
+    assert isinstance(trial, int), (
+        f"TEST create_trial: Trial number {trial} must be an integer."
+    )
 
-    assert (
-        trial > 0
-    ), f"TEST create_trial: Trial number {trial} must be positive."
+    assert trial > 0, (
+        f"TEST create_trial: Trial number {trial} must be positive."
+    )
 
     trial_folder = os.path.join(
         arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
     )
 
-    assert os.path.isdir(
-        trial_folder
-    ), f"TEST create_trial: Trial folder {trial} was not created."
+    assert os.path.isdir(trial_folder), (
+        f"TEST create_trial: Trial folder {trial} was not created."
+    )
 
     session = data_logging._get_number(
         os.path.join(arg["folder"], arg["participant"])
@@ -102,21 +102,21 @@ def test_create_trial():
         str(session), str(trial), arg["scene"], trajectory["file"]
     )
 
-    assert os.path.isfile(
-        os.path.join(trial_folder, filename)
-    ), f"TEST create_trial: File {trajectory['file']} does not exist."
+    assert os.path.isfile(os.path.join(trial_folder, filename)), (
+        f"TEST create_trial: File {trajectory['file']} does not exist."
+    )
 
     data = pd.read_csv(os.path.join(trial_folder, filename))
 
     data_header, wheel_columns = data_logging._select_header(
         trajectory["file"]
     )
-    assert (
-        data_header == trajectory["headers"]
-    ), f"TEST create_trial: {trajectory['file']} has  has wrong titles of header columns."
-    assert (
-        wheel_columns == trajectory["columns"]
-    ), f"TEST create_trial: {trajectory['file']} has wrong number of header columns."
+    assert data_header == trajectory["headers"], (
+        f"TEST create_trial: {trajectory['file']} has  has wrong titles of header columns."
+    )
+    assert wheel_columns == trajectory["columns"], (
+        f"TEST create_trial: {trajectory['file']} has wrong number of header columns."
+    )
 
     assert list(data.columns) == ["time"] + [
         data_header[i] + "[:," + str(j) + "]"
@@ -156,20 +156,20 @@ def test_create_wheels():
             wheels["side"] + "_" + file_type,
         )
 
-        assert os.path.isfile(
-            os.path.join(trial_folder, filename)
-        ), f"TEST _create_wheels: File {filename} is missing."
+        assert os.path.isfile(os.path.join(trial_folder, filename)), (
+            f"TEST _create_wheels: File {filename} is missing."
+        )
 
         data = pd.read_csv(os.path.join(trial_folder, filename))
 
         data_header, data_column = data_logging._select_header(file_type)
 
-        assert (
-            data_header == wheels["headers"][file_type]
-        ), f"TEST _create_wheels: {file_type} has wrong titles of header columns."
-        assert (
-            data_column == wheels["columns"][file_type]
-        ), f"TEST _create_wheels: {file_type} has wrong number of header columns."
+        assert data_header == wheels["headers"][file_type], (
+            f"TEST _create_wheels: {file_type} has wrong titles of header columns."
+        )
+        assert data_column == wheels["columns"][file_type], (
+            f"TEST _create_wheels: {file_type} has wrong number of header columns."
+        )
 
         assert list(data.columns) == ["time"] + [
             data_header[i] + "[:," + str(j) + "]"
@@ -220,9 +220,9 @@ def test_save_wheels():
             wheels["side"] + "_" + file_type,
         )
 
-        assert os.path.isfile(
-            os.path.join(trial_folder, filename)
-        ), f"TEST _save_wheels: File {filename} is missing."
+        assert os.path.isfile(os.path.join(trial_folder, filename)), (
+            f"TEST _save_wheels: File {filename} is missing."
+        )
 
         data = pd.read_csv(os.path.join(trial_folder, filename))
 
@@ -236,7 +236,9 @@ def test_save_wheels():
                 wheel_subset[subkey] = wheel_subset[subkey].reshape(-1, 1)
             assert np.allclose(
                 wheel_subset[subkey], data.filter(regex=subkey).values
-            ), f"TEST _save_wheels: Wheel data {file_type}-{subkey} was not saved properly to csv."
+            ), (
+                f"TEST _save_wheels: Wheel data {file_type}-{subkey} was not saved properly to csv."
+            )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
@@ -268,21 +270,23 @@ def test_save_data():
 
     for col in data.columns:
         if col == "position[:,3]":
-            assert (
-                data.loc[0][col] == 1.0
-            ), "TEST save_data: Static position column holds an incorrect value."
+            assert data.loc[0][col] == 1.0, (
+                "TEST save_data: Static position column holds an incorrect value."
+            )
         elif col == "rotation[:,3]":
-            assert (
-                data.loc[0][col] == 0.0
-            ), "TEST save_data: Static rotation column holds an incorrect value."
+            assert data.loc[0][col] == 0.0, (
+                "TEST save_data: Static rotation column holds an incorrect value."
+            )
         elif col == "time":
             assert (
                 datetime.fromtimestamp(data.loc[0][col]).date() == date.today()
-            ), "TEST save_data: Time column holds a value that did not happen today."
+            ), (
+                "TEST save_data: Time column holds a value that did not happen today."
+            )
         else:
-            assert isinstance(
-                data.loc[0][col], float
-            ), f"TEST save_data: Col {col} holds a value that is not a float."
+            assert isinstance(data.loc[0][col], float), (
+                f"TEST save_data: Col {col} holds a value that is not a float."
+            )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))

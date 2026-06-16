@@ -13,6 +13,7 @@ import csv
 import glob
 from typing import TypedDict, Any, cast
 import numpy as np
+import kineticstoolkit as ktk
 from nextwheel.software.python.nextwheel import NextWheel
 
 # %% Instrumented Wheels dictionary
@@ -187,7 +188,7 @@ def _select_header(data_type: str) -> tuple[list[str], list[int]]:
         The type of data to be saved from Simulator or instrumented wheels.
         Options are:
             Simulator (through Godot): trajectory.
-            NextWheel: Events, Analog, IMU, Encoder, Power.
+            NextWheel: Analog, IMU, Encoder, Power.
 
     Returns
     -------
@@ -197,12 +198,12 @@ def _select_header(data_type: str) -> tuple[list[str], list[int]]:
         The number of columns per column title.
 
     """
+    data_to_save = []
+    data_columns = []
+
     if data_type == "trajectory":
         data_to_save = ["position", "rotation"]
         data_columns = [4, 4]
-    elif data_type == "Events":
-        data_to_save = ["Event Name"]
-        data_columns = [1]
     elif data_type == "Analog":
         data_to_save = ["Channels", "Force", "Moment"]
         data_columns = [7, 4, 4]
@@ -215,9 +216,7 @@ def _select_header(data_type: str) -> tuple[list[str], list[int]]:
     elif data_type == "Power":
         data_to_save = ["Voltage", "Current", "Power"]
         data_columns = [1, 1, 1]
-    else:
-        data_to_save = []
-        data_columns = []
+
     return data_to_save, data_columns
 
 
@@ -362,6 +361,7 @@ def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
 
 
 def _save_wheels(
+    nw: dict[str, ktk.TimeSeries],
     session: str,
     trial_folder: str,
     scene: str,
@@ -374,6 +374,8 @@ def _save_wheels(
 
     Parameters
     ----------
+    nw:
+        Newly-fetched data from NextWheel.
     session :
         Current session number.
     trial_folder :
@@ -390,13 +392,10 @@ def _save_wheels(
         The default is the global variable wheels.
 
     """
-    nw = wheels[side].fetch(clear=True)
-
-    for key in nw.keys():
+    for key in nw:
         filename = _make_filename(session, trial, scene, side + "_" + key)
         data_lines = np.column_stack(
-            [nw[key].time]
-            + [nw[key].data[subkey] for subkey in nw[key].data.keys()]
+            [nw[key].time] + [nw[key].data[subkey] for subkey in nw[key].data]
         )
 
         with open(
@@ -435,10 +434,11 @@ def _stop_wheels(
         The default is the global variable wheels.
 
     """
-    for key in wheels.keys():
+    for key in wheels:
         wheels[key].stop_streaming()
+        nw = wheels[key].fetch(clear=True)
         _save_wheels(
-            session, trial_folder, scene, trial, side=key, wheels=wheels
+            nw, session, trial_folder, scene, trial, side=key, wheels=wheels
         )
         print("Successfully stopped stream from wheel: " + wheels[key].IP)
 
@@ -475,7 +475,7 @@ def start_log(
     )
 
     if arg["instrumented_wheels"]:
-        for key in wheels.keys():
+        for key in wheels:
             try:
                 wheels[key].IP = ip_addresses[key]
                 print(
@@ -507,7 +507,7 @@ def create_trial(
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_number(folder)
+    session = _get_number(folder) + 1
 
     session_folder = _make_folder(
         arg["folder"], arg["participant"], session=str(date.today())
@@ -530,7 +530,7 @@ def create_trial(
         print("Created the file " + filename)
 
     if arg["instrumented_wheels"]:
-        for key in wheels.keys():
+        for key in wheels:
             wheels[key].start_streaming()
             print("Streaming started for wheel: " + wheels[key].IP)
 
@@ -583,8 +583,10 @@ def save_data(
         )
 
     if arg["instrumented_wheels"]:
-        for key in wheels.keys():
+        for key in wheels:
+            nw = wheels[key].fetch(clear=True)
             _save_wheels(
+                nw,
                 str(session),
                 trial_folder,
                 arg["scene"],

@@ -26,9 +26,9 @@ jobs:
         cache: "pip"
     - name: Install dependencies
       run: |
-        pip install kineticstoolkit black docformatter pytest coverage pylint mypy
+        pip install kineticstoolkit ruff pytest coverage mypy
     - name: Test formatting
-      run: black --check .
+      run: ruff format --check .
     - name: Test with pytest and crash on warnings
       run: |
         pytest tests -W error::RuntimeWarning

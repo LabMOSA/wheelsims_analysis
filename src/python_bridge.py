@@ -21,11 +21,12 @@ being executed consinuously.
 
 """
 
-import socket
 import json
-import time
-import biofeedback
 import os
+import socket
+import time
+
+import biofeedback
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -56,7 +57,6 @@ COMMAND_MAPPING = {
 def _init_udp_socket():
     """Initialize the UDP sockets."""
     if _private_vars["sock"] == None:
-
         _private_vars["sock"] = socket.socket(
             socket.AF_INET, socket.SOCK_DGRAM
         )
@@ -78,7 +78,6 @@ def send_data(command, data):
 
 
 if __name__ == "__main__":
-
     _init_udp_socket()
 
     # Sending ping request, availables functions to Godot for debug scene
@@ -90,7 +89,6 @@ if __name__ == "__main__":
 
     # Listening Godot requests
     while _private_vars["is_running"]:
-
         # Execute every command in the UDP buffer
         while True:  # until there's nothing available anymore
             try:

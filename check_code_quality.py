@@ -27,14 +27,14 @@ def run_linter() -> None:  # pragma: no cover
     """Run code quality review (ruff)."""
     print("========================================")
     print("Code Quality Review (ruff)")
-    _run_and_print(["ruff", "check", "--fix", "."])
+    _run_and_print(["ruff", "check", "--fix", "src"])
 
 
 def run_static_type_checker() -> None:  # pragma: no cover
     """Run static typing checker (mypy)."""
     print("========================================")
     print("Checking Static Types (mypy)")
-    _run_and_print(["mypy", "."])
+    _run_and_print(["mypy", "src"])
 
 
 def run_unit_tests() -> None:  # pragma: no cover
@@ -46,7 +46,7 @@ def run_unit_tests() -> None:  # pragma: no cover
             "coverage",
             "run",
             "--source",
-            ".",
+            "src",
             "-m",
             "pytest",
         ]

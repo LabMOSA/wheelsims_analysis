@@ -29,8 +29,8 @@ follow_untyped_imports = true
 
 [tool.coverage.run]
 omit = [
-	"src/tests_repo/*",
-	"nextwheel/*",
+	"tests/*",
+	"src/nextwheel_repo/*",
 	"DataDescriptions.py",
 	"MoCapData.py",
 	"NatNetClient.py",

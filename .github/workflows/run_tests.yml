@@ -20,7 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
-        submodules: "true"
+        submodules: recursive
     - id: install-python
       uses: actions/setup-python@v6
       with:

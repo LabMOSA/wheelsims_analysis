@@ -18,15 +18,16 @@ jobs:
     runs-on: ubuntu-latest
         
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - id: install-python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.x"
         cache: "pip"
     - name: Install dependencies
       run: |
-        pip install kineticstoolkit ruff pytest coverage mypy
+        pip install -r requirements.txt
+        pip install -r requirements_dev.txt
     - name: Test formatting
       run: ruff format --check src
     - name: Test with pytest and crash on warnings

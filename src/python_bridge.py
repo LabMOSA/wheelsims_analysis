@@ -27,6 +27,7 @@ import socket
 import time
 
 import biofeedback
+import data_logging
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
@@ -51,6 +52,10 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
+    "start_logging": data_logging.start_log,
+    "create_trial": data_logging.create_trial,
+    "data_logging": data_logging.save_data,
+    "end_logging": data_logging.end_log,
 }
 
 

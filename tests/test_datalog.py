@@ -223,10 +223,14 @@ def test_save_wheels():
     )
 
     if arg["folder"].split("\\")[-1] == "tests":
-        wheel_data = ktk.load(os.path.join(arg["folder"], "nextwheel_fetch"))
+        wheel_data = ktk.load(
+            os.path.join(arg["folder"], "data/nextwheel_fetch.ktk.zip")
+        )
     else:
         wheel_data = ktk.load(
-            os.path.join(arg["folder"], "tests", "nextwheel_fetch")
+            os.path.join(
+                arg["folder"], "tests", "data/nextwheel_fetch.ktk.zip"
+            )
         )
 
     data_logging._create_wheels(

@@ -1,1 +1,0 @@
-[Contact us](mailto:chenier.felix@uqam.ca) for gerber and source files for the PCB, to ensure you get the most up to date PCB. We are going through different iterations at the moment and we will put the final prototype's PCB here.

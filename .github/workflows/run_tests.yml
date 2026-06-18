@@ -28,7 +28,9 @@ jobs:
       run: |
         pip install kineticstoolkit ruff pytest coverage mypy
     - name: Test formatting
-      run: ruff format --check .
+      run: ruff format --check src
     - name: Test with pytest and crash on warnings
       run: |
+        export PYTHONPATH=":src"
+        echo "Running tests with PYTHONPATH=$PYTHONPATH"
         pytest tests -W error::RuntimeWarning

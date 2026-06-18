@@ -2,7 +2,7 @@
 line-length = 79
 target-version = "py313"
 exclude = [
-	"nextwheel/*",
+	"src/nextwheel_repo/*",
 	"DataDescriptions.py",
 	"MoCapData.py",
 	"NatNetClient.py",
@@ -17,7 +17,7 @@ docstring-code-format = true
 
 [tool.mypy]
 exclude = [
-	"nextwheel/*",
+	"src/nextwheel_repo/*",
 	"DataDescriptions.py",
 	"MoCapData.py",
 	"NatNetClient.py",
@@ -29,7 +29,7 @@ follow_untyped_imports = true
 
 [tool.coverage.run]
 omit = [
-	"tests/*",
+	"src/tests_repo/*",
 	"nextwheel/*",
 	"DataDescriptions.py",
 	"MoCapData.py",

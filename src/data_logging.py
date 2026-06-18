@@ -15,7 +15,7 @@ from typing import Any, TypedDict, cast
 import kineticstoolkit as ktk
 import numpy as np
 
-from src.nextwheel.software.python.nextwheel import NextWheel
+from src.nextwheel_repo.software.python.nextwheel import NextWheel
 
 # %% Instrumented Wheels dictionary
 

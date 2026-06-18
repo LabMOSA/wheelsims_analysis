@@ -9,11 +9,19 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "PL", "D", "NPY", "PD"]
-ignore = ["D203", "D212", "D105", "D107"]
+select = ["B", "E", "W", "F", "I", "UP", "PL", "D", "NPY", "PD"]
+ignore = ["D203", "D212", "D105", "D107", "PLR0913", "B028", "B904", "PLW1641"]
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.pylint]
+max-returns = 10
+max-branches = 15
+allow-magic-value-types = ["int", "str", "bytes"]
 
 [tool.mypy]
 exclude = [

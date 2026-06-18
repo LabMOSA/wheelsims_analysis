@@ -1,0 +1,4 @@
+numpy>=2
+websocket-client>=1
+matplotlib>=3
+requests>=2

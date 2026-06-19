@@ -9,12 +9,17 @@ well as information collected through the instrumented wheels.
 import csv
 import glob
 import os
+import sys
+
+sys.path.append(os.path.dirname(os.getcwd()))
+
 from datetime import date
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
 
+import src.optitrack as ot
 from src.nextwheel_repo.software.python.nextwheel import NextWheel
 
 # %% Instrumented Wheels dictionary
@@ -188,6 +193,7 @@ def _select_header(
             "IMU": ["Acc", "Gyro", "Mag"],
             "Encoder": ["Angle"],
             "Power": ["Voltage", "Current", "Power"],
+            "RigidBody": ["Quaternions", "Positions"],
         },
         "columns": {
             "trajectory": [4, 4],
@@ -195,6 +201,7 @@ def _select_header(
             "IMU": [3, 3, 3],
             "Encoder": [1],
             "Power": [1, 1, 1],
+            "RigidBody": [4, 3],
         },
     },
 ) -> tuple[list[str], list[int]]:
@@ -208,6 +215,7 @@ def _select_header(
         Options are:
             Simulator (through Godot): trajectory.
             NextWheel: Analog, IMU, Encoder, Power.
+            Optitrack: RigidBody.
     data_headers :
         The default columns headers and numbers for each type of data to save.
 
@@ -243,6 +251,7 @@ def _make_filename(
         Options are:
             Simulator (through Godot): trajectory.
             NextWheel: Analog, IMU, Encoder, Power.
+            Optitrack: RigidBody + ID.
 
     Returns
     -------
@@ -297,7 +306,7 @@ def _create_wheels(
     side: str,
 ) -> None:
     """
-    Create and save CSV files to hold instrumented wheels data and events.
+    Create and save CSV files to hold data collected from instrumented wheels.
 
     Parameters
     ----------
@@ -321,12 +330,44 @@ def _create_wheels(
         _make_csv(trial_folder, filename, header)
 
 
+def _create_ot(
+    IDs: list[str],
+    trial_folder: str,
+    session: int,
+    trial: int,
+    scene: str,
+) -> None:
+    """
+    Create and save CSV files for data collected from Optitrack RigidBodies.
+
+    Parameters
+    ----------
+    IDs:
+        IDs of currently-active Rigid Bodies.
+    trial_folder
+        The folder containing data for the current trial in-progress.
+    session
+        The current session number.
+    trial
+        The current trial number.
+    scene
+        The current playable scene selected.
+
+    """
+    header = _make_header("RigidBody")
+    for key in IDs:
+        filename = _make_filename(
+            str(session), str(trial), scene, "rigidbody_" + key
+        )
+        _make_csv(trial_folder, filename, header)
+
+
 # %% Logging simulator
 
 
 def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
     """
-    Open and append data to an already-created CSV file containing trajectory.
+    Open and append data to an existing CSV file containing trajectory.
 
     Parameters
     ----------
@@ -360,7 +401,7 @@ def _save_wheels(
     trial_folder: str,
 ) -> None:
     """
-    Open and append data to instrumented wheels data dictionary.
+    Open and append data to CSV file containing instrumented wheels data.
 
     Parameters
     ----------
@@ -416,6 +457,76 @@ def _stop_wheels(
             )
             _save_wheels(ts, filename, trial_folder)
             print("Successfully stopped stream from wheel: " + wheel.IP)
+
+
+# %% Logging Optitrack
+
+
+def _save_ot(
+    motion: dict[str, ktk.TimeSeries],
+    trial_folder: str,
+    session: str,
+    trial: str,
+    scene: str,
+) -> None:
+    """
+    Open and append data to an existing CSV file containing Optitrack data.
+
+    Parameters
+    ----------
+    motion :
+        Newly-fetched data from all active Optitrack Rigid Bodies.
+    trial_folder :
+        Current trial folder.
+    session :
+        Current session.
+    trial :
+        Current trial.
+    scene:
+        Current scene.
+
+    """
+    for ID, ts in motion.items():
+        positions = ts.data[ID][:, 0:3, 3]
+
+        quaternions = ktk.geometry.get_quaternions(ts.data[ID])
+
+        data_lines = np.column_stack([ts.time] + [quaternions] + [positions])
+
+        filename = _make_filename(
+            str(session), str(trial), scene, "rigidbody_" + ID
+        )
+
+        with open(
+            os.path.join(trial_folder, filename),
+            "a",
+            newline="",
+            encoding="utf-8",
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerows(data_lines)
+
+
+def _stop_ot(trial_folder: str, session: str, trial: str, scene: str):
+    """
+    Stop Optitrack streaming and catch final events.
+
+    Parameters
+    ----------
+    trial_folder :
+        Current trial folder.
+    session :
+        Current session.
+    trial :
+        Current trial.
+    scene:
+        Current scene.
+
+    """
+    ot.stop()
+    print("Streaming ended for optitrack.")
+    motion = ot.fetch()
+    _save_ot(motion, trial_folder, session, trial, scene)
 
 
 # %% Public functions
@@ -499,6 +610,12 @@ def create_trial(
 
             _create_wheels(trial_folder, session, trial, arg["scene"], key)
 
+    if arg["motion_capture"]:
+        ot.start()
+        print("Streaming started for Optitrack.")
+        IDs = ot._data.keys()
+        _create_ot(IDs, trial_folder, session, trial, arg["scene"])
+
 
 def save_data(
     arg: ArgStructure,
@@ -542,13 +659,16 @@ def save_data(
 
     if arg["instrumented_wheels"]:
         for key, wheel in wheels.items():
-            wheel.stop_streaming()
             nw = wheel.fetch(clear=True)
             for subkey, ts in nw.items():
                 filename = _make_filename(
                     str(session), str(trial), arg["scene"], key + "_" + subkey
                 )
                 _save_wheels(ts, filename, trial_folder)
+
+    if arg["motion_capture"]:
+        motion = ot.fetch()
+        _save_ot(motion, trial_folder, session, trial, arg["scene"])
 
 
 def end_log(
@@ -584,5 +704,8 @@ def end_log(
             arg["scene"],
             wheels=wheels,
         )
+
+    if arg["motion_capture"]:
+        _stop_ot(trial_folder, session, trial, arg["scene"])
 
     print("Logging is done for current session: ", trial_folder)

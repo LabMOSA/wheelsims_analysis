@@ -11,15 +11,19 @@ import glob
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.getcwd()))
+sys.path.append(os.path.dirname(os.path.dirname(os.getcwd())))
 
+import time
 from datetime import date
+import pandas as pd
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 
-import src.optitrack as ot
-from src.nextwheel_repo.software.python.nextwheel import NextWheel
+import wheelsims_analysis.src.optitrack as ot
+from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
+    NextWheel,
+)
 
 # %% Instrumented Wheels dictionary
 
@@ -249,7 +253,8 @@ def _make_csv(folder: str, filename: str, header: list[str]) -> None:
         os.path.join(folder, filename), "w", newline="", encoding="utf-8"
     ) as file:
         writer = csv.writer(file)
-        writer.writerow(header)
+        if len(header) > 0:
+            writer.writerow(header)
 
 
 # %% Logging simulator
@@ -289,7 +294,7 @@ def _save_ts(
     ts: ktk.TimeSeries,
     filename: str,
     trial_folder: str,
-    new_file: bool = False,
+    write_data: bool = True,
 ) -> None:
     """
     Open and append data to CSV file containing time series data.
@@ -302,23 +307,29 @@ def _save_ts(
         Name of file to save to.
     trial_folder :
         Current trial folder.
-    new_file :
-        Whether to create new file (True) or append to existing one (False).
 
     """
     data_lines = ts.to_dataframe()
 
-    with open(
-        os.path.join(trial_folder, filename),
-        "a",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-        writer = csv.writer(file)
+    if data_lines.empty == False:
+        if os.path.isfile(os.path.join(trial_folder, filename)):
+            code = "a"
+        else:
+            code = "w"
 
-        if new_file:
-            writer.writerow(["time"] + list(data_lines.columns))
-        writer.writerows(data_lines.reset_index().to_numpy())
+        with open(
+            os.path.join(trial_folder, filename),
+            code,
+            newline="",
+            encoding="utf-8",
+        ) as file:
+            writer = csv.writer(file)
+
+            if code == "w":
+                writer.writerow(["time"] + list(data_lines.columns))
+
+            if write_data:
+                writer.writerows(data_lines.reset_index().to_numpy())
 
 
 def _stop_wheels(
@@ -326,6 +337,7 @@ def _stop_wheels(
     trial_folder: str,
     trial: str,
     scene: str,
+    wheels: NextWheel = wheels,
 ) -> None:
     """
     Stop instrumented wheels streaming and catch final events.
@@ -337,9 +349,11 @@ def _stop_wheels(
     trial_folder :
         Current trial folder.
     trial :
-        The current trial number.
+        Current trial number.
     scene :
-        The current scene.
+        Current scene.
+    wheels:
+        Current instance of NextWheel
 
     """
     for key, wheel in wheels.items():
@@ -430,6 +444,15 @@ def create_trial(
         Dictionary containing arguments received from Godot.
 
     """
+    if arg["instrumented_wheels"]:
+        for key, wheel in wheels.items():
+            wheel.start_streaming()
+            print("Streaming started for wheel: " + wheel.IP)
+
+    if arg["motion_capture"]:
+        ot.start()
+        print("Streaming started for Optitrack.")
+
     folder = _make_folder(arg["folder"], arg["participant"])
     session = _get_number(folder)
 
@@ -453,26 +476,29 @@ def create_trial(
         _make_csv(trial_folder, filename, header)
         print("Created the file " + filename)
 
-    if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
-            wheel.start_streaming()
-            print("Streaming started for wheel: " + wheel.IP)
-            nw = wheel.fetch(clear=True)
-            for subkey, ts in nw.items():
-                filename = _make_filename(
-                    str(session), str(trial), arg["scene"], key + "_" + subkey
-                )
-                _save_ts(ts, filename, trial_folder, new_file=True)
+    # if arg["motion_capture"] or arg["instrumented_wheels"]:
+    #     time.sleep(0.5)
+    #     if arg["motion_capture"]:
+    #         motion = ot.fetch()
+    #         for ID, ts in motion.items():
+    #             filename = _make_filename(
+    #                 str(session), str(trial), arg["scene"], "rigidbody_" + ID
+    #             )
+    #             _make_csv(trial_folder, filename, [])
+    #             _save_ts(ts, filename, trial_folder)
 
-    if arg["motion_capture"]:
-        ot.start()
-        print("Streaming started for Optitrack.")
-        motion = ot.fetch()
-        for ID, ts in motion.items():
-            filename = _make_filename(
-                str(session), str(trial), arg["scene"], "rigidbody_" + ID
-            )
-            _save_ts(ts, filename, trial_folder, new_file=True)
+    #     if arg["instrumented_wheels"]:
+    #         for key, wheel in wheels.items():
+    #             nw = wheel.fetch(clear=False)
+    #             for subkey, ts in nw.items():
+    #                 filename = _make_filename(
+    #                     str(session),
+    #                     str(trial),
+    #                     arg["scene"],
+    #                     key + "_" + subkey,
+    #                 )
+    #                 _make_csv(trial_folder, filename, [])
+    #                 _save_ts(ts, filename, trial_folder)
 
 
 def save_data(
@@ -531,6 +557,7 @@ def save_data(
             filename = _make_filename(
                 str(session), str(trial), arg["scene"], "rigidbody_" + ID
             )
+            data = pd.read_csv(os.path.join(trial_folder, filename))
             _save_ts(ts, filename, trial_folder)
 
 

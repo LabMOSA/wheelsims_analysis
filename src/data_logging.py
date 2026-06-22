@@ -17,7 +17,6 @@ from datetime import date
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
-import numpy as np
 
 import src.optitrack as ot
 from src.nextwheel_repo.software.python.nextwheel import NextWheel
@@ -157,17 +156,21 @@ def _get_number(folder: str) -> int:
 # %% File generation
 
 
-def _make_header(data_type: str) -> list[str]:
+def _make_header(
+    data_headers: list[str] = ["position", "rotation"],
+    data_columns: list[int] = [4, 4],
+) -> list[str]:
     """
     Create a header appropriate for the type of data to be saved.
 
     Parameters
     ----------
-    data_type
-        The type of data to be saved from Simulator or instrumented wheels.
-        Options are:
-            Simulator (through Godot): trajectory.
-            NextWheel: Analog, IMU, Encoder, Power.
+    data_headers
+        The specific column titles to be saved in the CSV file.
+        The default is ['position', 'rotation'] for the Simulator position.
+    data_columns
+        The number of columns per column title.
+        The default is [4, 4] for the Simulator position.
 
     Returns
     -------
@@ -175,61 +178,12 @@ def _make_header(data_type: str) -> list[str]:
         Header to be used when creating the CSV file.
 
     """
-    data_to_save, data_columns = _select_header(data_type)
     header = ["time"] + [
-        data_to_save[i] + "[:," + str(j) + "]"
-        for i in range(len(data_to_save))
+        data_headers[i] + "[:," + str(j) + "]"
+        for i in range(len(data_headers))
         for j in range(data_columns[i])
     ]
     return header
-
-
-def _select_header(
-    data_type: str,
-    data_headers={
-        "headers": {
-            "trajectory": ["position", "rotation"],
-            "Analog": ["Channels", "Force", "Moment"],
-            "IMU": ["Acc", "Gyro", "Mag"],
-            "Encoder": ["Angle"],
-            "Power": ["Voltage", "Current", "Power"],
-            "RigidBody": ["Quaternions", "Positions"],
-        },
-        "columns": {
-            "trajectory": [4, 4],
-            "Analog": [7, 4, 4],
-            "IMU": [3, 3, 3],
-            "Encoder": [1],
-            "Power": [1, 1, 1],
-            "RigidBody": [4, 3],
-        },
-    },
-) -> tuple[list[str], list[int]]:
-    """
-    Select the column titles and number of columns for the CSV file's header.
-
-    Parameters
-    ----------
-    data_type :
-        The type of data to be saved from Simulator or instrumented wheels.
-        Options are:
-            Simulator (through Godot): trajectory.
-            NextWheel: Analog, IMU, Encoder, Power.
-            Optitrack: RigidBody.
-    data_headers :
-        The default columns headers and numbers for each type of data to save.
-
-    Returns
-    -------
-    data_to_save
-        The specific column titles to be saved in the CSV file.
-    data_columns
-        The number of columns per column title.
-
-    """
-    data_to_save = data_headers["headers"][data_type]
-    data_columns = data_headers["columns"][data_type]
-    return data_to_save, data_columns
 
 
 def _make_filename(
@@ -298,70 +252,6 @@ def _make_csv(folder: str, filename: str, header: list[str]) -> None:
         writer.writerow(header)
 
 
-def _create_wheels(
-    trial_folder: str,
-    session: int,
-    trial: int,
-    scene: str,
-    side: str,
-) -> None:
-    """
-    Create and save CSV files to hold data collected from instrumented wheels.
-
-    Parameters
-    ----------
-    trial_folder
-        The folder containing data for the current trial in-progress.
-    session
-        The current session number.
-    trial
-        The current trial number.
-    scene
-        The current playable scene selected.
-    side
-        The specific wheel for which recording must be stopped.
-
-    """
-    for key in ["Analog", "IMU", "Encoder", "Power"]:
-        header = _make_header(key)
-        filename = _make_filename(
-            str(session), str(trial), scene, side + "_" + key
-        )
-        _make_csv(trial_folder, filename, header)
-
-
-def _create_ot(
-    IDs: list[str],
-    trial_folder: str,
-    session: int,
-    trial: int,
-    scene: str,
-) -> None:
-    """
-    Create and save CSV files for data collected from Optitrack RigidBodies.
-
-    Parameters
-    ----------
-    IDs:
-        IDs of currently-active Rigid Bodies.
-    trial_folder
-        The folder containing data for the current trial in-progress.
-    session
-        The current session number.
-    trial
-        The current trial number.
-    scene
-        The current playable scene selected.
-
-    """
-    header = _make_header("RigidBody")
-    for key in IDs:
-        filename = _make_filename(
-            str(session), str(trial), scene, "rigidbody_" + key
-        )
-        _make_csv(trial_folder, filename, header)
-
-
 # %% Logging simulator
 
 
@@ -392,30 +282,31 @@ def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
         writer.writerow(data_line)
 
 
-# %% Logging instrumented wheels
+# %% Logging time-series
 
 
-def _save_wheels(
+def _save_ts(
     ts: ktk.TimeSeries,
     filename: str,
     trial_folder: str,
+    new_file: bool = False,
 ) -> None:
     """
-    Open and append data to CSV file containing instrumented wheels data.
+    Open and append data to CSV file containing time series data.
 
     Parameters
     ----------
     ts :
-        Newly-fetched data from NextWheel.
+        Newly-fetched data from NextWheel or Optitrack.
     filename :
         Name of file to save to.
-    trial_folder
+    trial_folder :
         Current trial folder.
+    new_file :
+        Whether to create new file (True) or append to existing one (False).
 
     """
-    data_lines = np.column_stack(
-        [ts.time] + [ts.data[subkey] for subkey in ts.data]
-    )
+    data_lines = ts.to_dataframe()
 
     with open(
         os.path.join(trial_folder, filename),
@@ -424,7 +315,10 @@ def _save_wheels(
         encoding="utf-8",
     ) as file:
         writer = csv.writer(file)
-        writer.writerows(data_lines)
+
+        if new_file:
+            writer.writerow(["time"] + list(data_lines.columns))
+        writer.writerows(data_lines.reset_index().to_numpy())
 
 
 def _stop_wheels(
@@ -450,61 +344,13 @@ def _stop_wheels(
     """
     for key, wheel in wheels.items():
         wheel.stop_streaming()
+        print("Successfully stopped stream from wheel: " + wheel.IP)
         nw = wheel.fetch(clear=True)
         for subkey, ts in nw.items():
             filename = _make_filename(
                 session, trial, scene, key + "_" + subkey
             )
-            _save_wheels(ts, filename, trial_folder)
-            print("Successfully stopped stream from wheel: " + wheel.IP)
-
-
-# %% Logging Optitrack
-
-
-def _save_ot(
-    motion: dict[str, ktk.TimeSeries],
-    trial_folder: str,
-    session: str,
-    trial: str,
-    scene: str,
-) -> None:
-    """
-    Open and append data to an existing CSV file containing Optitrack data.
-
-    Parameters
-    ----------
-    motion :
-        Newly-fetched data from all active Optitrack Rigid Bodies.
-    trial_folder :
-        Current trial folder.
-    session :
-        Current session.
-    trial :
-        Current trial.
-    scene:
-        Current scene.
-
-    """
-    for ID, ts in motion.items():
-        positions = ts.data[ID][:, 0:3, 3]
-
-        quaternions = ktk.geometry.get_quaternions(ts.data[ID])
-
-        data_lines = np.column_stack([ts.time] + [quaternions] + [positions])
-
-        filename = _make_filename(
-            str(session), str(trial), scene, "rigidbody_" + ID
-        )
-
-        with open(
-            os.path.join(trial_folder, filename),
-            "a",
-            newline="",
-            encoding="utf-8",
-        ) as file:
-            writer = csv.writer(file)
-            writer.writerows(data_lines)
+            _save_ts(ts, filename, trial_folder)
 
 
 def _stop_ot(trial_folder: str, session: str, trial: str, scene: str):
@@ -526,7 +372,11 @@ def _stop_ot(trial_folder: str, session: str, trial: str, scene: str):
     ot.stop()
     print("Streaming ended for optitrack.")
     motion = ot.fetch()
-    _save_ot(motion, trial_folder, session, trial, scene)
+    for ID, ts in motion.items():
+        filename = _make_filename(
+            str(session), str(trial), scene, "rigidbody_" + ID
+        )
+        _save_ts(ts, filename, trial_folder, new_file=True)
 
 
 # %% Public functions
@@ -599,7 +449,7 @@ def create_trial(
         filename = _make_filename(
             str(session), str(trial), arg["scene"], "trajectory"
         )
-        header = _make_header("trajectory")
+        header = _make_header(["position", "rotation"], [4, 4])
         _make_csv(trial_folder, filename, header)
         print("Created the file " + filename)
 
@@ -607,14 +457,22 @@ def create_trial(
         for key, wheel in wheels.items():
             wheel.start_streaming()
             print("Streaming started for wheel: " + wheel.IP)
-
-            _create_wheels(trial_folder, session, trial, arg["scene"], key)
+            nw = wheel.fetch(clear=True)
+            for subkey, ts in nw.items():
+                filename = _make_filename(
+                    str(session), str(trial), arg["scene"], key + "_" + subkey
+                )
+                _save_ts(ts, filename, trial_folder, new_file=True)
 
     if arg["motion_capture"]:
         ot.start()
         print("Streaming started for Optitrack.")
-        IDs = ot._data.keys()
-        _create_ot(IDs, trial_folder, session, trial, arg["scene"])
+        motion = ot.fetch()
+        for ID, ts in motion.items():
+            filename = _make_filename(
+                str(session), str(trial), arg["scene"], "rigidbody_" + ID
+            )
+            _save_ts(ts, filename, trial_folder, new_file=True)
 
 
 def save_data(
@@ -644,18 +502,19 @@ def save_data(
         trial="T" + str(trial),
     )
 
-    trajectory_file = _make_filename(
-        str(session), str(trial), arg["scene"], "trajectory"
-    )
-
-    trajectory_data = _get_subset(arg, trajectory)
-
-    if (trajectory_data[trajectory[1]] is not None) or (
-        trajectory_data[trajectory[2]] is not None
-    ):
-        _save_trajectory(
-            os.path.join(trial_folder, trajectory_file), trajectory_data
+    if arg["player_trajectory"]:
+        trajectory_file = _make_filename(
+            str(session), str(trial), arg["scene"], "trajectory"
         )
+
+        trajectory_data = _get_subset(arg, trajectory)
+
+        if (trajectory_data[trajectory[1]] is not None) or (
+            trajectory_data[trajectory[2]] is not None
+        ):
+            _save_trajectory(
+                os.path.join(trial_folder, trajectory_file), trajectory_data
+            )
 
     if arg["instrumented_wheels"]:
         for key, wheel in wheels.items():
@@ -664,11 +523,15 @@ def save_data(
                 filename = _make_filename(
                     str(session), str(trial), arg["scene"], key + "_" + subkey
                 )
-                _save_wheels(ts, filename, trial_folder)
+                _save_ts(ts, filename, trial_folder)
 
     if arg["motion_capture"]:
         motion = ot.fetch()
-        _save_ot(motion, trial_folder, session, trial, arg["scene"])
+        for ID, ts in motion.items():
+            filename = _make_filename(
+                str(session), str(trial), arg["scene"], "rigidbody_" + ID
+            )
+            _save_ts(ts, filename, trial_folder)
 
 
 def end_log(

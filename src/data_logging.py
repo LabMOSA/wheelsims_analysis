@@ -13,13 +13,10 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.getcwd())))
 
-import time
 from datetime import date
-import pandas as pd
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
-
 import wheelsims_analysis.src.optitrack as ot
 from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
     NextWheel,
@@ -287,7 +284,7 @@ def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
         writer.writerow(data_line)
 
 
-# %% Logging time-series
+# %% Logging TimeSeries
 
 
 def _save_ts(
@@ -311,7 +308,7 @@ def _save_ts(
     """
     data_lines = ts.to_dataframe()
 
-    if data_lines.empty == False:
+    if not data_lines.empty:
         if os.path.isfile(os.path.join(trial_folder, filename)):
             code = "a"
         else:
@@ -383,14 +380,15 @@ def _stop_ot(trial_folder: str, session: str, trial: str, scene: str):
         Current scene.
 
     """
+    motion = ot.fetch(clear_buffer=True, transform_data=False)
     ot.stop()
     print("Streaming ended for optitrack.")
-    motion = ot.fetch()
     for ID, ts in motion.items():
-        filename = _make_filename(
-            str(session), str(trial), scene, "rigidbody_" + ID
-        )
-        _save_ts(ts, filename, trial_folder, new_file=True)
+        if len(ID) == 3:
+            filename = _make_filename(
+                str(session), str(trial), scene, "rigidbody_" + ID
+            )
+            _save_ts(ts, filename, trial_folder)
 
 
 # %% Public functions
@@ -447,7 +445,7 @@ def create_trial(
     if arg["instrumented_wheels"]:
         for key, wheel in wheels.items():
             wheel.start_streaming()
-            print("Streaming started for wheel: " + wheel.IP)
+            print("Streaming started for wheel: ", key, " of IP ", wheel.IP)
 
     if arg["motion_capture"]:
         ot.start()
@@ -475,30 +473,6 @@ def create_trial(
         header = _make_header(["position", "rotation"], [4, 4])
         _make_csv(trial_folder, filename, header)
         print("Created the file " + filename)
-
-    # if arg["motion_capture"] or arg["instrumented_wheels"]:
-    #     time.sleep(0.5)
-    #     if arg["motion_capture"]:
-    #         motion = ot.fetch()
-    #         for ID, ts in motion.items():
-    #             filename = _make_filename(
-    #                 str(session), str(trial), arg["scene"], "rigidbody_" + ID
-    #             )
-    #             _make_csv(trial_folder, filename, [])
-    #             _save_ts(ts, filename, trial_folder)
-
-    #     if arg["instrumented_wheels"]:
-    #         for key, wheel in wheels.items():
-    #             nw = wheel.fetch(clear=False)
-    #             for subkey, ts in nw.items():
-    #                 filename = _make_filename(
-    #                     str(session),
-    #                     str(trial),
-    #                     arg["scene"],
-    #                     key + "_" + subkey,
-    #                 )
-    #                 _make_csv(trial_folder, filename, [])
-    #                 _save_ts(ts, filename, trial_folder)
 
 
 def save_data(
@@ -552,13 +526,16 @@ def save_data(
                 _save_ts(ts, filename, trial_folder)
 
     if arg["motion_capture"]:
-        motion = ot.fetch()
+        motion = ot.fetch(clear_buffer=True, transform_data=False)
         for ID, ts in motion.items():
-            filename = _make_filename(
-                str(session), str(trial), arg["scene"], "rigidbody_" + ID
-            )
-            data = pd.read_csv(os.path.join(trial_folder, filename))
-            _save_ts(ts, filename, trial_folder)
+            if len(ID) == 3:
+                filename = _make_filename(
+                    str(session),
+                    str(trial),
+                    arg["scene"],
+                    "rigidbody_" + ID,
+                )
+                _save_ts(ts, filename, trial_folder)
 
 
 def end_log(
@@ -596,6 +573,6 @@ def end_log(
         )
 
     if arg["motion_capture"]:
-        _stop_ot(trial_folder, session, trial, arg["scene"])
+        _stop_ot(trial_folder, str(session), str(trial), arg["scene"])
 
     print("Logging is done for current session: ", trial_folder)

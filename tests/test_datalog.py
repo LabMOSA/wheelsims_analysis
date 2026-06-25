@@ -76,9 +76,9 @@ def test_start_log():
     """
     data_logging.start_log(arg)
 
-    assert os.path.isdir(
-        os.path.join(arg["folder"], arg["participant"])
-    ), f"TEST start_trial: Folder {arg['participant']} was not created."
+    assert os.path.isdir(os.path.join(arg["folder"], arg["participant"])), (
+        f"TEST start_trial: Folder {arg['participant']} was not created."
+    )
 
     assert os.path.isdir(
         os.path.join(arg["folder"], arg["participant"], str(date.today()))
@@ -102,21 +102,21 @@ def test_create_trial():
         os.path.join(arg["folder"], arg["participant"], str(date.today()))
     )
 
-    assert isinstance(
-        trial, int
-    ), f"TEST create_trial: Trial number {trial} must be an integer."
+    assert isinstance(trial, int), (
+        f"TEST create_trial: Trial number {trial} must be an integer."
+    )
 
-    assert (
-        trial > 0
-    ), f"TEST create_trial: Trial number {trial} must be positive."
+    assert trial > 0, (
+        f"TEST create_trial: Trial number {trial} must be positive."
+    )
 
     trial_folder = os.path.join(
         arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
     )
 
-    assert os.path.isdir(
-        trial_folder
-    ), f"TEST create_trial: Trial folder {trial} was not created."
+    assert os.path.isdir(trial_folder), (
+        f"TEST create_trial: Trial folder {trial} was not created."
+    )
 
     session = data_logging._get_number(
         os.path.join(arg["folder"], arg["participant"])
@@ -126,9 +126,9 @@ def test_create_trial():
         str(session), str(trial), arg["scene"], trajectory["file"]
     )
 
-    assert os.path.isfile(
-        os.path.join(trial_folder, filename)
-    ), f"TEST create_trial: File {trajectory['file']} does not exist."
+    assert os.path.isfile(os.path.join(trial_folder, filename)), (
+        f"TEST create_trial: File {trajectory['file']} does not exist."
+    )
 
     data = pd.read_csv(os.path.join(trial_folder, filename))
 
@@ -185,29 +185,97 @@ def test_save_wheels():
         )
         data_logging._save_ts(wheel_data[file_type], filename, trial_folder)
 
-        assert os.path.isfile(
-            os.path.join(trial_folder, filename)
-        ), f"TEST _save_wheels: File {filename} is missing."
+        assert os.path.isfile(os.path.join(trial_folder, filename)), (
+            f"TEST _save_ts: File {filename} is missing."
+        )
 
         data = pd.read_csv(os.path.join(trial_folder, filename))
         wheel_subset = wheel_data[file_type].data
 
         data_header = list(wheel_data[file_type].to_dataframe().columns)
 
-        assert (
-            list(data.columns)[1:] == data_header
-        ), f"TEST _create_wheels: Headers for {file_type} are incorrect."
+        assert list(data.columns)[1:] == data_header, (
+            f"TEST _save_ts: Headers for {file_type} are incorrect."
+        )
 
-        assert np.allclose(
-            wheel_data[file_type].time, data["time"]
-        ), f"TEST _save_wheels: Wheel data {file_type} is missing timestamps."
+        assert np.allclose(wheel_data[file_type].time, data["time"]), (
+            f"TEST _save_ts: Wheel data {file_type} is missing timestamps."
+        )
 
         for subkey in wheel_subset:
             if len(wheel_subset[subkey].shape) == 1:
                 wheel_subset[subkey] = wheel_subset[subkey].reshape(-1, 1)
             assert np.allclose(
                 wheel_subset[subkey], data.filter(regex=subkey).values
-            ), f"TEST _save_wheels: {file_type}-{subkey} not saved properly."
+            ), f"TEST _save_ts: {file_type}-{subkey} not saved properly."
+
+    if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
+        shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
+
+
+def test_save_ts_twice():
+    """
+    Test append protery of _save_ts.
+
+    Calls _save_ts twice in a row, to test append ("a") vs write ("w") codes.
+    Asserts that sample data from the instrumented wheels is saved twice.
+    """
+    data_logging.start_log(arg)
+    data_logging.create_trial(arg)
+
+    trial = data_logging._get_number(
+        os.path.join(arg["folder"], arg["participant"], str(date.today()))
+    )
+
+    trial_folder = os.path.join(
+        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
+    )
+
+    session = data_logging._get_number(
+        os.path.join(arg["folder"], arg["participant"])
+    )
+
+    if arg["folder"].split("\\")[-1] == "tests":
+        wheel_data = ktk.load(
+            os.path.join(arg["folder"], "data", wheels["sample"])
+        )
+    else:
+        wheel_data = ktk.load(
+            os.path.join(arg["folder"], "tests", "data", wheels["sample"])
+        )
+    for i in range(2):
+        for file_type in wheels["headers"]:
+            filename = data_logging._make_filename(
+                str(session),
+                str(trial),
+                arg["scene"],
+                wheels["side"] + "_" + file_type,
+            )
+            data_logging._save_ts(
+                wheel_data[file_type], filename, trial_folder
+            )
+
+    for file_type in wheels["headers"]:
+        filename = data_logging._make_filename(
+            str(session),
+            str(trial),
+            arg["scene"],
+            wheels["side"] + "_" + file_type,
+        )
+        assert os.path.isfile(os.path.join(trial_folder, filename)), (
+            f"TEST _save_ts: File {filename} is missing."
+        )
+
+        data = pd.read_csv(os.path.join(trial_folder, filename))
+        data_header = list(wheel_data[file_type].to_dataframe().columns)
+
+        assert list(data.columns)[1:] == data_header, (
+            f"TEST _save_ts: Headers for {file_type} are incorrect."
+        )
+
+        assert len(data["time"]) == 2 * len(wheel_data[file_type].time), (
+            f"TEST _save_ts: Data {file_type} was not appended the second time."
+        )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
@@ -254,24 +322,24 @@ def test_save_ot():
 
         data_logging._save_ts(motion_data[ID], filename, trial_folder)
 
-        assert os.path.isfile(
-            os.path.join(trial_folder, filename)
-        ), f"TEST _save_ot: File {filename} is missing."
+        assert os.path.isfile(os.path.join(trial_folder, filename)), (
+            f"TEST _save_ts: File {filename} is missing."
+        )
 
         data = pd.read_csv(os.path.join(trial_folder, filename))
         motion_sample = motion_data[ID].to_dataframe()
 
-        assert list(data.columns) == ["time"] + list(
-            motion_sample.columns
-        ), f"TEST _create_ot: Headers for {ID} are incorrect."
+        assert list(data.columns) == ["time"] + list(motion_sample.columns), (
+            f"TEST _save_ts: Headers for {ID} are incorrect."
+        )
 
         assert np.allclose(
             motion_sample.reset_index()["index"], data["time"]
-        ), f"TEST _save_ot: Optitrack data {ID} is missing timestamps."
+        ), f"TEST _save_ts: Optitrack data {ID} is missing timestamps."
 
-        assert np.allclose(
-            motion_sample, data.drop(columns="time")
-        ), f"TEST _save_ot: Data {ID} not saved properly."
+        assert np.allclose(motion_sample, data.drop(columns="time")), (
+            f"TEST _save_ts: Data {ID} not saved properly."
+        )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
@@ -309,21 +377,21 @@ def test_save_data():
 
     for col in data.columns:
         if col == "position[:,3]":
-            assert (
-                data.loc[0][col] == 1.0
-            ), "TEST save_data: Third position column should hold value 1.0."
+            assert data.loc[0][col] == 1.0, (
+                "TEST save_data: Third position column should hold value 1.0."
+            )
         elif col == "rotation[:,3]":
-            assert (
-                data.loc[0][col] == 0.0
-            ), "TEST save_data: Third rotation column should hold value 0.0."
+            assert data.loc[0][col] == 0.0, (
+                "TEST save_data: Third rotation column should hold value 0.0."
+            )
         elif col == "time":
             assert (
                 datetime.fromtimestamp(data.loc[0][col]).date() == date.today()
             ), "TEST save_data: Time column holds a value that are not today."
         else:
-            assert isinstance(
-                data.loc[0][col], float
-            ), f"TEST save_data: Col {col} holds a value that is not a float."
+            assert isinstance(data.loc[0][col], float), (
+                f"TEST save_data: Col {col} holds a value that is not a float."
+            )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))

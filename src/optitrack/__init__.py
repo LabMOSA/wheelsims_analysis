@@ -84,7 +84,9 @@ def receive_rigid_body_frame(
         _data[new_id]["_times"].pop(0)
 
 
-def fetch() -> dict[str, ktk.TimeSeries]:
+def fetch(
+    clear_buffer=False, transform_data=True
+) -> dict[str, ktk.TimeSeries]:
     """
     Get the trajectory of all received rigid bodies as TimeSeries of
     transforms.
@@ -97,6 +99,17 @@ def fetch() -> dict[str, ktk.TimeSeries]:
     A dictionary of TimeSeries is returned instead of one TimeSeries because
     each data is received at a different time value. TimeSeries can then be
     merged to a single time vector using the TimeSeries.merge() method.
+
+    Parameters
+    ----------
+    clear_buffer
+        Whether to clear the data buffer after acquisition.
+        The default is False.
+    transform_data
+        Whether to create the homogeneous transformation matrix (True) from the
+        orientations and positions, or to return this raw data (False).
+        The default is True.
+
 
     Returns
     -------
@@ -115,16 +128,21 @@ def fetch() -> dict[str, ktk.TimeSeries]:
         positions_np = np.array(value["_positions"][:n_samples])[:, 0:3]
         orientations_np = np.array(value["_orientations"][:n_samples])[:, 0:4]
 
-        # Create the homogeneous transformation matrix
-        transforms = ktk.geometry.create_transform_series(
-            quaternions=orientations_np, positions=positions_np
-        )
+        if transform_data:
+            # Create the homogeneous transformation matrix
+            transforms = ktk.geometry.create_transform_series(
+                quaternions=orientations_np, positions=positions_np
+            )
+        else:
+            transforms = np.hstack((orientations_np, positions_np))
 
         # Create the timeseries
         ts[str(key)] = ktk.TimeSeries(
-            data={str(key): transforms}, time=times_np
+            data={str(key): transforms},
+            time=times_np,
         )
-
+    if clear_buffer:
+        clear()
     return ts
 
 

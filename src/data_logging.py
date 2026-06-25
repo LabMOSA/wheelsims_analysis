@@ -30,28 +30,54 @@ wheels = {
 }
 
 
+class FileIDs(TypedDict):
+    """
+    Struture of the dictionary containing the names of files to be saved.
+
+    player_trajectory:
+        The name of the file containing the player's trajectory.
+    instrumented_wheels:
+        The name of the file containing the instrumented wheels data.
+    motion_capture:
+        A list of the names of the files containing the motion capture data.
+        Each file contains information about a single Rigid Body
+
+    """
+
+    player_trajectory: "csv.writer"
+    instrumented_wheels: "csv.writer"
+    motion_capture: list["csv.writer"]
+
+
+session_writers = {
+    "player_trajectory": None,
+    "instrumented_wheels": None,
+    "motion_capture": None,
+}
+
+
 class ArgStructure(TypedDict):
     """
     Structure of the dictionary containing arguments received from Godot.
 
     folder:
-        the main folder where all data is saved.
+        The main folder where all data is saved.
     participant:
-        the current participant identifier.
+        The current participant identifier.
     time:
-        the current timestamp.
+        The current timestamp.
     scene:
-        the current selected playable scene.
+        The current selected playable scene.
     player_trajectory:
-        whether to save the player's trajectory.
+        Whether to save the player's trajectory.
     instrumented_wheels:
-        whether to save the wheels.
+        Whether to save the wheels.
     motion_capture:
-        whether to save the motion capture.
+        Whether to save the motion capture.
     position:
-        the current player position in the simulator.
+        The current player position in the simulator.
     rotation:
-        the current player rotation in the simulator.
+        The current player rotation in the simulator.
 
     """
 
@@ -232,7 +258,13 @@ def _make_filename(
     return file
 
 
-def _make_csv(folder: str, filename: str, header: list[str]) -> None:
+def _make_csv(
+    folder: str,
+    filename: str,
+    header: list[str],
+    file_type: str,
+    session_writers: FileIDs = session_writers,
+) -> None:
     """
     Create a CSV file of a particular header within specified folder.
 
@@ -249,15 +281,20 @@ def _make_csv(folder: str, filename: str, header: list[str]) -> None:
     with open(
         os.path.join(folder, filename), "w", newline="", encoding="utf-8"
     ) as file:
-        writer = csv.writer(file)
+        session_writers[file_type] = csv.writer(file)
         if len(header) > 0:
-            writer.writerow(header)
+            session_writers[file_type].writerow(header)
+    return session_writers
 
 
 # %% Logging simulator
 
 
-def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
+def _save_trajectory(
+    filename: str,
+    data_values: dict[str, str],
+    session_writers=session_writers,
+) -> None:
     """
     Open and append data to an existing CSV file containing trajectory.
 
@@ -279,9 +316,7 @@ def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
         + ["0"]
     )
 
-    with open(filename, "a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(data_line)
+    session_writers["player_trajectory"].writerow(data_line)
 
 
 # %% Logging TimeSeries
@@ -292,6 +327,7 @@ def _save_ts(
     filename: str,
     trial_folder: str,
     write_data: bool = True,
+    session_writers: FileIDs = session_writers,
 ) -> None:
     """
     Open and append data to CSV file containing time series data.
@@ -307,6 +343,7 @@ def _save_ts(
 
     """
     data_lines = ts.to_dataframe()
+    file_type = filename.rsplit("\\", 4)[0]
 
     if not data_lines.empty:
         if os.path.isfile(os.path.join(trial_folder, filename)):
@@ -320,13 +357,17 @@ def _save_ts(
             newline="",
             encoding="utf-8",
         ) as file:
-            writer = csv.writer(file)
+            session_writers[file_type] = csv.writer(file)
 
             if code == "w":
-                writer.writerow(["time"] + list(data_lines.columns))
+                session_writers[file_type].writerow(
+                    ["time"] + list(data_lines.columns)
+                )
 
             if write_data:
-                writer.writerows(data_lines.reset_index().to_numpy())
+                session_writers[file_type].writerows(
+                    data_lines.reset_index().to_numpy()
+                )
 
 
 def _stop_wheels(
@@ -398,6 +439,8 @@ def start_log(
         "right": "192.168.0.86",
         "left": "192.168.0.13",
     },
+    session_writers: FileIDs = session_writers,
+    wheels=wheels,
 ) -> None:
     """
     Create folders for current (new) session, in which trials will be saved.
@@ -432,6 +475,7 @@ def start_log(
 
 def create_trial(
     arg: ArgStructure,
+    wheels=wheels,
 ) -> None:
     """
     Create empty files where data will be saved during this current trial.
@@ -471,13 +515,15 @@ def create_trial(
             str(session), str(trial), arg["scene"], "trajectory"
         )
         header = _make_header(["position", "rotation"], [4, 4])
-        _make_csv(trial_folder, filename, header)
+        _make_csv(trial_folder, filename, header, "player_trajectory")
         print("Created the file " + filename)
 
 
 def save_data(
     arg: ArgStructure,
     trajectory: list[str] = ["time", "position", "rotation"],
+    wheels=wheels,
+    session_writers=session_writers,
 ) -> None:
     """
     Open and append new data line to trajectory and instrumented wheels files.
@@ -513,7 +559,9 @@ def save_data(
             trajectory_data[trajectory[2]] is not None
         ):
             _save_trajectory(
-                os.path.join(trial_folder, trajectory_file), trajectory_data
+                os.path.join(trial_folder, trajectory_file),
+                trajectory_data,
+                session_writers["player_trajectory"],
             )
 
     if arg["instrumented_wheels"]:

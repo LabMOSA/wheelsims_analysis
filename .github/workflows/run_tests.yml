@@ -1,0 +1,39 @@
+name: run_tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "**" ]
+  schedule:
+     - cron: "15 0 1,6,11,16,21,26 * *"
+  workflow_dispatch:
+  
+jobs:
+  unittests:
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    runs-on: ubuntu-latest
+        
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+    - id: install-python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.x"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements_dev.txt
+    - name: Test formatting
+      run: ruff format --check src
+    - name: Test with pytest and crash on warnings
+      run: |
+        export PYTHONPATH=":src"
+        echo "Running tests with PYTHONPATH=$PYTHONPATH"
+        pytest tests -W error::RuntimeWarning

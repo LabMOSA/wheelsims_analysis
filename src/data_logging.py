@@ -22,12 +22,16 @@ from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
     NextWheel,
 )
 
-# %% Instrumented Wheels dictionary
+# %% Session dictionaries
 
 wheels = {
     "right": NextWheel(),
     # "left": NextWheel(),
 }
+
+session_writers = {}
+
+# %% Classes to hold data and arguments
 
 
 class FileLogger:
@@ -67,9 +71,6 @@ class FileLogger:
         """Close an opened file."""
         if self.file:
             self.file.close()
-
-
-session_writers = {}
 
 
 class ArgStructure(TypedDict):
@@ -280,7 +281,7 @@ def _make_filename(
 def _make_csv(
     filename: str,
     header: list[str],
-    file_type: str,
+    filetype: str,
     session_writers: dict[FileLogger] = session_writers,
 ) -> None:
     """
@@ -292,16 +293,16 @@ def _make_csv(
         Name of file to be created.
     header :
         Header of file to be created.
-    file_type :
+    filetype :
         Type of file to be created, used as key in session_writers.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
 
     """
-    session_writers[file_type] = FileLogger(filename)
-    session_writers[file_type].open_log()
-    session_writers[file_type].log_row(header)
+    session_writers[filetype] = FileLogger(filename)
+    session_writers[filetype].open_log()
+    session_writers[filetype].log_row(header)
 
 
 # %% Logging simulator
@@ -357,7 +358,7 @@ def _save_ts(
         Newly-fetched data from NextWheel or Optitrack.
     filename :
         Name of file to save to.
-    file_type :
+    filetype :
         Type of file to be created, used as key in session_writers.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
@@ -372,6 +373,9 @@ def _save_ts(
             _make_csv(filename, header, filetype, session_writers)
 
         session_writers[filetype].log_row(data_lines.reset_index().to_numpy())
+
+
+# %% Stopping devices external to Simulator
 
 
 def _stop_wheels(
@@ -467,10 +471,9 @@ def start_log(
         "right": "192.168.0.86",
         "left": "192.168.0.13",
     },
-    wheels: NextWheel = wheels,
 ) -> None:
     """
-    Create folders for cfurrent (new) session, in which trials will be saved.
+    Create folders for furrent (new) session, in which trials will be saved.
 
     Parameters
     ----------
@@ -479,9 +482,6 @@ def start_log(
     ip_addresses
         Optional. The two IP addresses corresponding to the right and the left
         wheels. The default is {"right": "192.168.0.86", "left": "0.0.0.0"}
-    wheels :
-        Current instance of NextWheel.
-        The default is wheels.
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
@@ -505,7 +505,6 @@ def start_log(
 
 def create_trial(
     arg: ArgStructure,
-    wheels: NextWheel = wheels,
     session_writers: dict[FileLogger] = session_writers,
 ) -> None:
     """
@@ -515,9 +514,6 @@ def create_trial(
     ----------
     arg :
         Dictionary containing arguments received from Godot.
-    wheels :
-        Current instance of NextWheel.
-        The default is wheels.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
@@ -564,7 +560,6 @@ def create_trial(
 def save_data(
     arg: ArgStructure,
     trajectory: list[str] = ["time", "position", "rotation"],
-    wheels: NextWheel = wheels,
     session_writers: dict[FileLogger] = session_writers,
 ) -> None:
     """
@@ -577,13 +572,9 @@ def save_data(
     trajectory :
         The different data types related to the trajectory to be saved.
         The default is ["time", "position", "rotation"].
-    wheels :
-        Current instance of NextWheel.
-        The default is wheels.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
-
 
     """
     trial = _get_number(
@@ -647,7 +638,6 @@ def save_data(
 
 def end_log(
     arg: ArgStructure,
-    wheels: NextWheel = wheels,
     session_writers: dict[FileLogger] = session_writers,
 ) -> None:
     """
@@ -657,9 +647,6 @@ def end_log(
     ----------
     arg :
         Dictionary containing arguments received from Godot.
-    wheels :
-        Current instance of NextWheel.
-        The default is wheels.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.

@@ -91,11 +91,46 @@ def test_end_log():
     data_logging.create_trial(arg)
     data_logging.end_log(arg)
 
+    trial = data_logging._get_number(
+        os.path.join(arg["folder"], arg["participant"], str(date.today()))
+    )
+
+    assert isinstance(trial, int), (
+        f"TEST end_log: Trial number {trial} must be an integer."
+    )
+
+    assert trial > 0, f"TEST end_log: Trial number {trial} must be positive."
+
+    trial_folder = os.path.join(
+        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
+    )
+
+    assert os.path.isdir(trial_folder), (
+        f"TEST end_log: Trial folder {trial} was not created."
+    )
+
+    session = data_logging._get_number(
+        os.path.join(arg["folder"], arg["participant"])
+    )
+
+    filename = data_logging._make_filename(
+        str(session), str(trial), arg["scene"], trajectory["file"]
+    )
+
+    assert os.path.isfile(os.path.join(trial_folder, filename)), (
+        f"TEST end_log: File {trajectory['file']} does not exist."
+    )
+
+    csv_filename = filename.split(".txt")[0] + ".csv"
+    assert os.path.isfile(os.path.join(trial_folder, csv_filename)), (
+        f"TEST end_log: File {trajectory['file']} not converted to csv."
+    )
+
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# %% New trial
+# # %% New trial
 
 
 def test_create_trial():
@@ -141,7 +176,7 @@ def test_create_trial():
     )
 
     data_logging.end_log(arg)
-    data = pd.read_csv(os.path.join(trial_folder, filename))
+    data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
 
     assert list(data.columns) == ["time"] + [
         trajectory["headers"][i] + "[:," + str(j) + "]"
@@ -153,7 +188,7 @@ def test_create_trial():
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# %% Saving
+# # %% Saving
 
 
 def test_save_data():
@@ -185,7 +220,7 @@ def test_save_data():
         str(session), str(trial), arg["scene"], trajectory["file"]
     )
 
-    data = pd.read_csv(os.path.join(trial_folder, filename))
+    data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
 
     for col in data.columns:
         if col == "position[:,3]":
@@ -269,7 +304,7 @@ def test_save_ts():
                 arg["scene"],
                 wheels["file"] + "_" + file_type,
             )
-            data = pd.read_csv(os.path.join(trial_folder, filename))
+            data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
 
             data_header = list(
                 sample["data"][file_type].to_dataframe().columns

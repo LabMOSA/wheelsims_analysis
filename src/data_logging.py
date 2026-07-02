@@ -6,10 +6,12 @@ well as information collected through the instrumented wheels.
 
 """
 
-import csv
+# import csv
 import glob
 import os
 import sys
+
+import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.getcwd())))
 
@@ -25,28 +27,34 @@ from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
 # %% Session dictionaries
 
 wheels = {
-    "right": NextWheel(),
-    # "left": NextWheel(),
+    "wheels": {
+        "right": NextWheel(),
+        # "left": NextWheel(),
+    },
+    "ip_addresses": {
+        "right": "192.168.0.86",
+        "left": "192.168.0.13",
+    },
 }
 
-session_writers = {}
 
 # %% Classes to hold data and arguments
 
 
 class FileLogger:
-    """FileLogger class holds CSV file of filename and its writer."""
+    """FileLogger class holds an open file of filename."""
 
     def __init__(self, filename):
         """Initialize FileLogger object."""
         self.filename = filename
         self.file = None
-        self.writer = None
+        # self.writer = None
 
     def open_log(self) -> None:
         """Open file and create writer object."""
-        self.file = open(self.filename, "w", newline="", encoding="utf-8")
-        self.writer = csv.writer(self.file)
+        # self.file = open(self.filename, "w", newline="", encoding="utf-8")
+        # self.writer = csv.writer(self.file)
+        self.file = open(self.filename, "w", encoding="utf-8")
 
     def log_row(self, data_lines: list) -> None:
         """
@@ -63,14 +71,25 @@ class FileLogger:
             Error is raised when trying to write to a closed file.
         """
         if self.file and not self.file.closed:
-            self.writer.writerows(data_lines)
+            #    self.writer.writerows(data_lines)
+            for row in data_lines:
+                self.file.write("\t".join(map(str, row)) + "\n")
+
         else:
-            raise ValueError(f"CSV File {self.filename} is closed.")
+            raise ValueError(f"File {self.filename} is closed.")
 
     def close_log(self) -> None:
         """Close an opened file."""
         if self.file:
             self.file.close()
+
+    def convert_csv(self) -> None:
+        """Convert the written file from .txt to .csv."""
+        txt_data = pd.read_csv(self.filename, sep="\t")
+        txt_data.to_csv(self.filename.split(".txt")[0] + ".csv", index=False)
+
+
+session_writers: dict[str, FileLogger] = {}
 
 
 class ArgStructure(TypedDict):
@@ -203,7 +222,7 @@ def _get_number(folder: str) -> int:
 def _make_header(
     data_headers: list[str] = ["position", "rotation"],
     data_columns: list[int] = [4, 4],
-) -> list[str]:
+) -> list[list[str]]:
     """
     Create a header appropriate for the type of data to be saved.
 
@@ -272,7 +291,7 @@ def _make_filename(
         + scene
         + "_"
         + data_type
-        + ".csv"
+        + ".txt"  # ".csv"
     )
 
     return file
@@ -280,9 +299,9 @@ def _make_filename(
 
 def _make_csv(
     filename: str,
-    header: list[str],
+    header: list[list[str]],
     filetype: str,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Create a CSV file of a particular header within specified folder.
@@ -311,7 +330,7 @@ def _make_csv(
 def _save_trajectory(
     filename: str,
     data_values: dict[str, str],
-    session_writers=session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Open and append data to an existing CSV file containing trajectory.
@@ -327,10 +346,8 @@ def _save_trajectory(
         The default is session_writers.
 
     """
-    timestamp = data_values["time"]
-
     data_line = [
-        [timestamp]
+        [data_values["time"]]
         + list(data_values["position"].strip("()").split(","))
         + ["1"]
         + list(data_values["rotation"].strip("()").split(","))
@@ -347,7 +364,7 @@ def _save_ts(
     ts: ktk.TimeSeries,
     filename: str,
     filetype: str,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Open and append data to CSV file containing time series data.
@@ -372,7 +389,9 @@ def _save_ts(
             header = [["time"] + list(data_lines.columns)]
             _make_csv(filename, header, filetype, session_writers)
 
-        session_writers[filetype].log_row(data_lines.reset_index().to_numpy())
+        session_writers[filetype].log_row(
+            list(data_lines.reset_index().to_numpy())
+        )
 
 
 # %% Stopping devices external to Simulator
@@ -383,8 +402,7 @@ def _stop_wheels(
     trial_folder: str,
     trial: str,
     scene: str,
-    wheels: NextWheel = wheels,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Stop instrumented wheels streaming and catch final events.
@@ -399,15 +417,12 @@ def _stop_wheels(
         Current trial number.
     scene :
         Current scene.
-    wheels :
-        Current instance of NextWheel.
-        The default is wheels.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
 
     """
-    for key, wheel in wheels.items():
+    for key, wheel in wheels["wheels"].items():
         wheel.stop_streaming()
         print("Successfully stopped stream from wheel: " + wheel.IP)
         nw = wheel.fetch(clear=True)
@@ -418,7 +433,7 @@ def _stop_wheels(
             _save_ts(
                 ts,
                 os.path.join(trial_folder, filename),
-                key,
+                key + "_" + subkey,
                 session_writers,
             )
 
@@ -428,7 +443,7 @@ def _stop_ot(
     session: str,
     trial: str,
     scene: str,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ):
     """
     Stop Optitrack streaming and catch final events.
@@ -465,12 +480,10 @@ def _stop_ot(
 
 
 # %% Public functions
+
+
 def start_log(
     arg: ArgStructure,
-    ip_addresses: dict[str, str] = {
-        "right": "192.168.0.86",
-        "left": "192.168.0.13",
-    },
 ) -> None:
     """
     Create folders for furrent (new) session, in which trials will be saved.
@@ -479,9 +492,6 @@ def start_log(
     ----------
     arg
         Dictionary containing arguments received from Godot.
-    ip_addresses
-        Optional. The two IP addresses corresponding to the right and the left
-        wheels. The default is {"right": "192.168.0.86", "left": "0.0.0.0"}
 
     """
     folder = _make_folder(arg["folder"], arg["participant"])
@@ -491,9 +501,9 @@ def start_log(
     )
 
     if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
+        for key, wheel in wheels["wheels"].items():
             try:
-                wheel.IP = ip_addresses[key]
+                wheel.IP = wheels["ip_addresses"][key]
                 print(
                     "Successfully established connection to wheel: " + wheel.IP
                 )
@@ -505,7 +515,7 @@ def start_log(
 
 def create_trial(
     arg: ArgStructure,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Create empty files where data will be saved during this current trial.
@@ -520,7 +530,7 @@ def create_trial(
 
     """
     if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
+        for key, wheel in wheels["wheels"].items():
             wheel.start_streaming()
             print("Streaming started for wheel: ", key, " of IP ", wheel.IP)
 
@@ -559,8 +569,7 @@ def create_trial(
 
 def save_data(
     arg: ArgStructure,
-    trajectory: list[str] = ["time", "position", "rotation"],
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Open and append new data line to trajectory and instrumented wheels files.
@@ -569,9 +578,6 @@ def save_data(
     ----------
     arg :
         Dictionary containing arguments received from Godot.
-    trajectory :
-        The different data types related to the trajectory to be saved.
-        The default is ["time", "position", "rotation"].
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
@@ -593,10 +599,10 @@ def save_data(
             str(session), str(trial), arg["scene"], "trajectory"
         )
 
-        trajectory_data = _get_subset(arg, trajectory)
+        trajectory_data = _get_subset(arg, ["time", "position", "rotation"])
 
-        if (trajectory_data[trajectory[1]] is not None) or (
-            trajectory_data[trajectory[2]] is not None
+        if (trajectory_data["position"] is not None) or (
+            trajectory_data["rotation"] is not None
         ):
             _save_trajectory(
                 os.path.join(trial_folder, trajectory_file),
@@ -605,7 +611,7 @@ def save_data(
             )
 
     if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
+        for key, wheel in wheels["wheels"].items():
             nw = wheel.fetch(clear=True)
             for subkey, ts in nw.items():
                 filename = _make_filename(
@@ -614,7 +620,7 @@ def save_data(
                 _save_ts(
                     ts,
                     os.path.join(trial_folder, filename),
-                    key,
+                    key + "_" + subkey,
                     session_writers,
                 )
 
@@ -638,7 +644,7 @@ def save_data(
 
 def end_log(
     arg: ArgStructure,
-    session_writers: dict[FileLogger] = session_writers,
+    session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
     Confirm the end of recording and terminate instrumented wheels streaming.
@@ -672,7 +678,6 @@ def end_log(
             trial_folder,
             str(trial),
             arg["scene"],
-            wheels,
             session_writers,
         )
 
@@ -685,7 +690,8 @@ def end_log(
             session_writers,
         )
 
-    for key, writer in session_writers.items():
+    for _key, writer in session_writers.items():
         writer.close_log()
+        writer.convert_csv()
 
     print("Logging is done for current session: ", trial_folder)

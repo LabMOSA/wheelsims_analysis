@@ -28,8 +28,8 @@ import socket
 import time
 
 import biofeedback
-
 import data_logging
+
 from . import sender
 
 UDP_IP = "127.0.0.1"

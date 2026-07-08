@@ -20,6 +20,7 @@ import numpy as np
 from matplotlib.patches import Polygon as MplPolygon
 
 import optitrack as ot
+from bridge_package import sender
 
 # %% Public variables
 
@@ -36,6 +37,9 @@ MIN_CYCLE_DURATION = 0.4
 
 # Minimum peak velocity required to filter out parasitic movements (m/s)
 MIN_CYCLE_MAX_VELOCITY = 0.2
+
+# Current analysis window (n s).
+LIMIT_DURATION_CURRENT_WINDOW = 5.0
 
 
 # %% Typing classes
@@ -169,44 +173,59 @@ class KtkDataAndCycles(TypedDict):
     cycles: list[PushCycle] | None
 
 
-class Results(TypedDict):
+class RuntimeState(TypedDict):
     """
-    Global state and accumulated processing results for the biofeedback system.
+     Global state and accumulated processing results for biofeedback system.
 
-    run_mode :
-        Current execution state controlling real-time data acquisition.
-    data :
-        Raw input data mapping stream names to TimeSeries.
-    current_window_data :
-        Processed kinematic data and cycles scoped to the active time window.
-    cycles :
-        Historical or cumulative list of push cycles for each side.
+     run_mode :
+         Current execution state controlling real-time data acquisition.
+         - 'start'  : Live streaming from OptiTrack.
+         - 'stop'   : Idle state, acquisition stopped,structures are cleared.
+         - 'offline': Test with injected local data.
+     data :
+         Raw input data mapping stream names to TimeSeries.
+     current_window_data :
+         Processed kinematic data and cycles scoped to the active time window.
     new_cycle_log :
-        Counter or index tracking recently logged cycles for file writing.
-    new_cycle_send :
-        Counter or index tracking cycles sent to the biofeedback display.
-    ts_full :
-        Full continuous time-series history aggregated since the session start.
+         Counter or index tracking recently logged cycles for file writing.
+     new_cycle_send :
+         Counter or index tracking cycles sent to the biofeedback display.
     """
 
-    run_mode: Literal["start", "stop"]
+    run_mode: Literal["start", "stop", "offline"]
     data: dict[str, ktk.TimeSeries] | None
     current_window_data: (
         dict[Literal["left", "right"], KtkDataAndCycles] | None
     )
-    cycles: dict[Literal["left", "right"], list]
     new_cycle_log: dict[Literal["left", "right"], int]
     new_cycle_send: dict[Literal["left", "right"], int]
+
+
+class KinematicsData(TypedDict):
+    """
+    Accumulated cycle metrics and full session time-series.
+
+    cycles :
+        Historical or cumulative list of push cycles for each side.
+    ts_full :
+        Full continuous time-series history aggregated since the session start.
+    """
+
+    cycles: dict[Literal["left", "right"], list]
     ts_full: dict[Literal["left", "right"], ktk.TimeSeries | None]
 
 
-results: Results = {
+# %% Private variables
+_runtime_state: RuntimeState = {
     "run_mode": "stop",
     "data": None,
     "current_window_data": None,
-    "cycles": {"left": [], "right": []},
     "new_cycle_log": {"left": 1, "right": 1},
     "new_cycle_send": {"left": 3, "right": 3},
+}
+
+kinematics_data: KinematicsData = {
+    "cycles": {"left": [], "right": []},
     "ts_full": {"left": None, "right": None},
 }
 
@@ -220,26 +239,28 @@ def biofeedback_stop(arg: Arg) -> None:
     Display the full kinematics and push pattern graphics
     (by default is commented)
     """
-    # try:
-    #     # Display full kinematics and push pattern graphics at script
-    #     # termination.
-    #     # Reconstructs the global session dataset (limit_duration=0)
-    #     # and injects the complete accumulated cycle history for both sides.
+    try:
+        # Display full kinematics and push pattern graphics at script
+        # termination.
+        # Reconstructs the global session dataset (limit_duration=0)
+        # and injects the complete accumulated cycle history for both sides.
 
-    #     _plot_sides_kinematics(results)
+        _plot_sides_kinematics(kinematics_data)
 
-    #     _plot_side_push_pattern(arg, results, "left")
-    #     _plot_side_push_pattern(arg, results, "right")
+        _plot_side_push_pattern(arg, kinematics_data, "left")
+        _plot_side_push_pattern(arg, kinematics_data, "right")
 
-    # except Exception as e:
-    #     print(f"Display full kinematics and push pattern : {e}")
+    except Exception as e:
+        print(f"Display full kinematics and push pattern : {e}")
 
-    # ktk.save("results", results)
+    _init_variables()
 
-    _init_results()
-
-    ot.stop()
-    ot.clear()
+    if _runtime_state["run_mode"] == "start":
+        try:
+            ot.stop()
+            ot.clear()
+        except Exception as e:
+            print(f"close and clear optitrack streaming : {e}")
 
     print("Biofeedback closed")
 
@@ -248,65 +269,44 @@ def biofeedback_stop(arg: Arg) -> None:
 
 def biofeedback_update(arg: Arg) -> None:
     """
-    Execute a real-time update iteration for the biofeedback.
+    Execute an update iteration for the biofeedback (live and offline modes).
 
-    Handles the live streaming state machine: initializes the
-    OptiTrack acquisition on startup, fetches new tracking frames, extracts
-    and filters side-specific kinematics, detects propulsion cycles,
-    logs progress, and streams computed metrics to Godot.
+    Handles the streaming state machine: initializes OptiTrack on startup,
+    fetches new tracking frames in 'start' mode, or processes pre-loaded local
+    data in 'offline' mode. It extracts and filters kinematics, detects
+    propulsion cycles, logs progress, and streams computed metrics to Godot.
     """
-    if results["run_mode"] == "stop":
+    if _runtime_state["run_mode"] == "stop":
         ot.start()
-
         time.sleep(1)
-
         print("Biofeedback started")
+        _runtime_state["run_mode"] = "start"
 
-        results["run_mode"] = "start"
-
-    elif results["run_mode"] == "start":
-        start = time.time()
-
+    elif _runtime_state["run_mode"] == "start":
         try:
-            results["data"] = ot.fetch()
+            _runtime_state["data"] = ot.fetch()
         except Exception as e:
             print(e)
 
-        if not results["data"]:
+        if not _runtime_state["data"]:
             return
 
-        end = time.time()
-
-        results["current_window_data"] = _analyze_current_window(
-            results["data"],
+        _execute_analysis_pipeline(
+            _runtime_state,
+            kinematics_data,
             arg,
-            results["cycles"],
-            limit_duration=5,
+            LIMIT_DURATION_CURRENT_WINDOW,
         )
 
-        if results["current_window_data"] is None:
+    elif _runtime_state["run_mode"] == "offline":
+        if not _runtime_state["data"]:
             return
 
-        results["cycles"] = _update_data_cycles(
-            results["cycles"],
-            results["current_window_data"],
-        )
-        results["ts_full"] = _update_ts_full(
-            results["ts_full"],
-            results["current_window_data"],
-        )
-
-        results["new_cycle_send"] = _send_data_godot(
-            results["new_cycle_send"],
-            results["cycles"],
-        )
-
-        results["new_cycle_log"] = _print_log(
-            results["new_cycle_log"],
-            results["cycles"],
-            results["current_window_data"],
-            end,
-            start,
+        _execute_analysis_pipeline(
+            _runtime_state,
+            kinematics_data,
+            arg,
+            LIMIT_DURATION_CURRENT_WINDOW,
         )
 
 
@@ -998,8 +998,6 @@ def _send_data_godot(
     Computes median push frequency and extracts normalized geometry from the
     last three cycles to stream via python_bridge.
     """
-    from python_bridge import send_data
-
     sides: tuple[Literal["left", "right"], Literal["left", "right"]] = (
         "left",
         "right",
@@ -1042,7 +1040,7 @@ def _send_data_godot(
                 }
             }
 
-            send_data("biofeedback_update", data)
+            sender.send_data("biofeedback_update", data)
 
             new_cycle_send[side] += 1
 
@@ -1101,7 +1099,7 @@ def _print_log(
     return new_cycle_log
 
 
-def _plot_sides_kinematics(results: Results) -> None:
+def _plot_sides_kinematics(kinematics_data: KinematicsData) -> None:
     """Plot Position for both side."""
     plt.figure()
     plt.suptitle("Bilateral kinematics")
@@ -1111,7 +1109,7 @@ def _plot_sides_kinematics(results: Results) -> None:
         "right",
     )
     for side in sides:
-        ts_full = results["ts_full"][side]
+        ts_full = kinematics_data["ts_full"][side]
 
         if ts_full is None:
             continue
@@ -1124,7 +1122,7 @@ def _plot_sides_kinematics(results: Results) -> None:
         plt.title("Position")
         colors = [(1, 0, 0), (0.5, 0.25, 0.25)]
 
-        for i, cycle in enumerate(results["cycles"][side]):
+        for i, cycle in enumerate(kinematics_data["cycles"][side]):
             start = cycle["in_push"]["time"]
             end = cycle["end_push"]["time"]
             color = colors[i % 2]
@@ -1144,11 +1142,11 @@ def _plot_sides_kinematics(results: Results) -> None:
 
 def _plot_side_push_pattern(
     arg: Arg,
-    results: Results,
+    kinematics_data: KinematicsData,
     side: Literal["left", "right"],
 ) -> None:
     """Plot push pattern for a single side."""
-    cycles = results["cycles"][side]
+    cycles = kinematics_data["cycles"][side]
     num_cycles = len(cycles)
 
     if num_cycles == 0:
@@ -1205,7 +1203,7 @@ def _plot_side_push_pattern(
 
             # Split the time-series cycle into recovery and push phases
 
-            ts_full = results["ts_full"][side]
+            ts_full = kinematics_data["ts_full"][side]
 
             if ts_full is None:
                 continue
@@ -1296,32 +1294,99 @@ def _plot_side_push_pattern(
         fig.subplots_adjust(top=0.9, hspace=0.4, wspace=0.3)
 
 
-def _init_results() -> None:
+def _init_variables() -> None:
 
-    results["run_mode"] = "stop"
-    results["data"] = None
-    results["current_window_data"] = None
-    results["cycles"] = {"left": [], "right": []}
-    results["new_cycle_log"] = {"left": 1, "right": 1}
-    results["new_cycle_send"] = {"left": 3, "right": 3}
-    results["ts_full"] = {"left": None, "right": None}
+    _runtime_state["run_mode"] = "stop"
+    _runtime_state["data"] = None
+    _runtime_state["current_window_data"] = None
+    _runtime_state["new_cycle_log"] = {"left": 1, "right": 1}
+    _runtime_state["new_cycle_send"] = {"left": 3, "right": 3}
+
+    kinematics_data["cycles"] = {"left": [], "right": []}
+    kinematics_data["ts_full"] = {"left": None, "right": None}
+
+
+def _execute_analysis_pipeline(
+    _runtime_state: RuntimeState,
+    kinematics_data: KinematicsData,
+    arg: Arg,
+    LIMIT_DURATION_CURRENT_WINDOW: float,
+) -> tuple[float, float]:
+    """Run kinematic analysis and distribute results."""
+    start_time = time.time()
+
+    if _runtime_state["data"] is None:
+        end_time = time.time()
+        return start_time, end_time
+
+    _runtime_state["current_window_data"] = _analyze_current_window(
+        _runtime_state["data"],
+        arg,
+        kinematics_data["cycles"],
+        limit_duration=LIMIT_DURATION_CURRENT_WINDOW,
+    )
+
+    if _runtime_state["current_window_data"] is None:
+        end_time = time.time()
+        return start_time, end_time
+
+    kinematics_data["cycles"] = _update_data_cycles(
+        kinematics_data["cycles"],
+        _runtime_state["current_window_data"],
+    )
+    kinematics_data["ts_full"] = _update_ts_full(
+        kinematics_data["ts_full"],
+        _runtime_state["current_window_data"],
+    )
+
+    _runtime_state["new_cycle_send"] = _send_data_godot(
+        _runtime_state["new_cycle_send"],
+        kinematics_data["cycles"],
+    )
+
+    end_time = time.time()
+
+    _runtime_state["new_cycle_log"] = _print_log(
+        _runtime_state["new_cycle_log"],
+        kinematics_data["cycles"],
+        _runtime_state["current_window_data"],
+        end_time,
+        start_time,
+    )
+
+    return start_time, end_time
 
 
 # %% Main
 if __name__ == "__main__":
+    """
+    Execution script for online real-time biofeedback.
+
+    This script is directly functional out-of-the-box. To run it, ensure you:
+    1. Start the live data streaming from Motive (OptiTrack).
+    2. Configure the physical properties in the 'arg' dictionary.
+    3. Wear both tracking clusters configured in Motive with the following IDs:
+        - ID 102: Reference Wheelchair simulator
+        - ID 201: Left Hand Cluster
+        - ID 202: Right Hand Cluster
+
+    Press Ctrl+C in the terminal to safely stop the stream and close the
+    biofeedback.
+    """
+
     arg: Arg = {
         "coordinates_left_wheel_center": [
-            -0.504,
-            0.295,
-            -0.779,
+            -0.200,
+            0.300,
+            -0.750,
         ],
         "coordinates_right_wheel_center": [
-            -0.500,
-            0.296,
-            -0.204,
+            -0.200,
+            0.300,
+            -0.200,
         ],
-        "coordinates_left_hand": [0.081, -0.029, 0.082],
-        "coordinates_right_hand": [0.003, -0.145, 0.010],
+        "coordinates_left_hand": [-0.125, -0.000, 0.020],
+        "coordinates_right_hand": [0.020, -0.160, 0.000],
         "wheel_diameter": 0.54,
     }
 
@@ -1331,10 +1396,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Biofeedback closed")
         biofeedback_stop(arg)
-
-    # try:
-    #     data = ktk.load("maria")
-    #     biofeedback_update(arg)
-    #     # biofeedback_stop(arg)
-    # except Exception as e:
-    #     print(e)

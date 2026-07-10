@@ -64,15 +64,25 @@ def test_start_log():
     Asserts folders were created for the test participant and today's session.
 
     """
-    data_logging.start_log(arg)
+    session_details: dict[str, data_logging.FileDetails] = {}
 
-    assert os.path.isdir(os.path.join(arg["folder"], arg["participant"])), (
+    data_logging.start_log(arg, session_details=session_details)
+
+    assert session_details["session_date"] == str(date.today()), (
+        f"TEST start_trial: Session date {session_details['session_date']} is incorrect."
+    )
+
+    assert isinstance(session_details["session"], int), (
+        f"TEST start_log: Session number {session_details['session']} must be an integer."
+    )
+
+    assert os.path.isdir(session_details["participant_folder"]), (
         f"TEST start_trial: Folder {arg['participant']} was not created."
     )
 
-    assert os.path.isdir(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
-    ), f"TEST start_trial: Session folder {str(date.today())} was not created"
+    assert os.path.isdir(session_details["session_folder"]), (
+        f"TEST start_trial: Session folder {str(date.today())} was not created."
+    )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
@@ -87,50 +97,41 @@ def test_end_log():
 
     Does not assert anything, but tests proper functioning (without crashing).
     """
-    data_logging.start_log(arg)
-    data_logging.create_trial(arg)
-    data_logging.end_log(arg)
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
 
-    trial = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
     )
 
-    assert isinstance(trial, int), (
-        f"TEST end_log: Trial number {trial} must be an integer."
+    writers = session_writers.copy()
+
+    data_logging.end_log(
+        arg, session_details=session_details, session_writers=session_writers
     )
 
-    assert trial > 0, f"TEST end_log: Trial number {trial} must be positive."
+    for key in session_writers.keys():
+        assert os.path.isfile(
+            os.path.join(
+                session_details["trial_folder"], writers[key]["filename"]
+            )
+        ), f"TEST end_log: File {key} does not exist."
 
-    trial_folder = os.path.join(
-        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
-    )
+        csv_filename = writers[key]["filename"].split(".txt")[0] + ".csv"
+        assert os.path.isfile(
+            os.path.join(session_details["trial_folder"], csv_filename)
+        ), f"TEST end_log: File {key} not converted to csv."
 
-    assert os.path.isdir(trial_folder), (
-        f"TEST end_log: Trial folder {trial} was not created."
-    )
-
-    session = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"])
-    )
-
-    filename = data_logging._make_filename(
-        str(session), str(trial), arg["scene"], trajectory["file"]
-    )
-
-    assert os.path.isfile(os.path.join(trial_folder, filename)), (
-        f"TEST end_log: File {trajectory['file']} does not exist."
-    )
-
-    csv_filename = filename.split(".txt")[0] + ".csv"
-    assert os.path.isfile(os.path.join(trial_folder, csv_filename)), (
-        f"TEST end_log: File {trajectory['file']} not converted to csv."
+    assert len(session_writers.keys()) == 0, (
+        "TEST end_log: Session writers still exist."
     )
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# # %% New trial
+# %% New trial
 
 
 def test_create_trial():
@@ -140,43 +141,45 @@ def test_create_trial():
     Asserts that a new trial was initiated, and that the appropriate CSV file
     was created (to save the player trajectory).
     """
-    data_logging.start_log(arg)
-    data_logging.create_trial(arg)
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
 
-    trial = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
     )
 
-    assert isinstance(trial, int), (
-        f"TEST create_trial: Trial number {trial} must be an integer."
+    assert isinstance(session_details["trial"], int), (
+        f"TEST create_trial: Trial number {session_details['trial']} must be an integer."
     )
 
-    assert trial > 0, (
-        f"TEST create_trial: Trial number {trial} must be positive."
+    assert session_details["trial"] > 0, (
+        f"TEST create_trial: Trial number {session_details['trial']} must be positive."
     )
 
-    trial_folder = os.path.join(
-        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
+    assert os.path.isdir(session_details["trial_folder"]), (
+        f"TEST create_trial: Trial folder {session_details['trial_folder']} was not created."
     )
 
-    assert os.path.isdir(trial_folder), (
-        f"TEST create_trial: Trial folder {trial} was not created."
-    )
+    assert os.path.isfile(
+        os.path.join(
+            session_details["trial_folder"],
+            session_writers["player_trajectory"].filename,
+        )
+    ), f"TEST create_trial: File {trajectory['file']} does not exist."
 
-    session = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"])
-    )
+    writers = session_writers.copy()
 
-    filename = data_logging._make_filename(
-        str(session), str(trial), arg["scene"], trajectory["file"]
+    data_logging.end_log(
+        arg, session_details=session_details, session_writers=session_writers
     )
-
-    assert os.path.isfile(os.path.join(trial_folder, filename)), (
-        f"TEST create_trial: File {trajectory['file']} does not exist."
+    data = pd.read_csv(
+        os.path.join(
+            session_details["trial_folder"],
+            writers["player_trajectory"].filename,
+        ),
+        sep="\t",
     )
-
-    data_logging.end_log(arg)
-    data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
 
     assert list(data.columns) == ["time"] + [
         trajectory["headers"][i] + "[:," + str(j) + "]"
@@ -188,7 +191,7 @@ def test_create_trial():
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# # %% Saving
+# # # %% Saving
 
 
 def test_save_data():
@@ -198,29 +201,29 @@ def test_save_data():
     Assert that sample data for the player trajectory is properly saved, with
     the correct date.
     """
-    data_logging.start_log(arg)
-    data_logging.create_trial(arg)
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
 
-    trial = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
     )
 
-    trial_folder = os.path.join(
-        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
+    data_logging.save_data(
+        arg, session_details=session_details, session_writers=session_writers
     )
+    writers = session_writers.copy()
 
-    session = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"])
+    data_logging.end_log(
+        arg, session_details=session_details, session_writers=session_writers
     )
-
-    data_logging.save_data(arg)
-    data_logging.end_log(arg)
-
-    filename = data_logging._make_filename(
-        str(session), str(trial), arg["scene"], trajectory["file"]
+    data = pd.read_csv(
+        os.path.join(
+            session_details["trial_folder"],
+            writers["player_trajectory"].filename,
+        ),
+        sep="\t",
     )
-
-    data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
 
     for col in data.columns:
         if col == "position[:,3]":
@@ -251,19 +254,12 @@ def test_save_ts():
     Asserts that sample data from the instrumented wheels is properly saved,
     with the correct date.
     """
-    data_logging.start_log(arg)
-    data_logging.create_trial(arg)
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
 
-    trial = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
-    )
-
-    trial_folder = os.path.join(
-        arg["folder"], arg["participant"], str(date.today()), "T" + str(trial)
-    )
-
-    session = data_logging._get_number(
-        os.path.join(arg["folder"], arg["participant"])
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
     )
 
     samples = [wheels, motion]
@@ -279,32 +275,39 @@ def test_save_ts():
 
         for file_type in sample["headers"]:
             filename = data_logging._make_filename(
-                str(session),
-                str(trial),
                 arg["scene"],
-                wheels["file"] + "_" + file_type,
+                sample["file"] + "_" + file_type,
+                session_details=session_details,
             )
+
             data_logging._save_ts(
                 sample["data"][file_type],
-                os.path.join(trial_folder, filename),
-                file_type,
+                sample["file"] + "_" + file_type,
+                arg["scene"],
+                session_writers=session_writers,
+                session_details=session_details,
             )
 
-            assert os.path.isfile(os.path.join(trial_folder, filename)), (
-                f"TEST _save_ts: File {filename} is missing."
-            )
+            assert os.path.isfile(
+                os.path.join(session_details["trial_folder"], filename),
+            ), f"TEST _save_ts: File {filename} is missing."
 
-    data_logging.end_log(arg)
+    data_logging.end_log(
+        arg, session_details=session_details, session_writers=session_writers
+    )
 
     for sample in samples:
         for file_type in sample["headers"]:
             filename = data_logging._make_filename(
-                str(session),
-                str(trial),
                 arg["scene"],
-                wheels["file"] + "_" + file_type,
+                sample["file"] + "_" + file_type,
+                session_details=session_details,
             )
-            data = pd.read_csv(os.path.join(trial_folder, filename), sep="\t")
+
+            data = pd.read_csv(
+                os.path.join(session_details["trial_folder"], filename),
+                sep="\t",
+            )
 
             data_header = list(
                 sample["data"][file_type].to_dataframe().columns

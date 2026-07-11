@@ -49,7 +49,7 @@ wheels = {
 motion = {
     "file": "rigidbody",
     "headers": ["102", "201", "202"],
-    "sample": "optitrack_fetch.ktk.zip",
+    "sample": "optitrack_untransformed.ktk.zip",
     "data": None,
 }
 

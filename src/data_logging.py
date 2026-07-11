@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
+import numpy as np
 import wheelsims_analysis.src.optitrack as ot
 from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
     NextWheel,
@@ -48,12 +49,9 @@ class FileLogger:
         """Initialize FileLogger object."""
         self.filename = filename
         self.file = None
-        # self.writer = None
 
     def open_log(self) -> None:
         """Open file and create writer object."""
-        # self.file = open(self.filename, "w", newline="", encoding="utf-8")
-        # self.writer = csv.writer(self.file)
         self.file = open(
             self.filename, "w", encoding="utf-8", buffering=1024 * 1024
         )
@@ -73,7 +71,6 @@ class FileLogger:
             Error is raised when trying to write to a closed file.
         """
         if self.file and not self.file.closed:
-            #    self.writer.writerows(data_lines)
             for row in data_lines:
                 self.file.write("\t".join(map(str, row)) + "\n")
 
@@ -323,7 +320,7 @@ def _make_filename(
         + scene
         + "_"
         + data_type
-        + ".txt"  # ".csv"
+        + ".txt"
     )
 
     return file
@@ -415,11 +412,9 @@ def _save_ts(
         The default is session_details.
 
     """
-    data_lines = ts.to_dataframe()
-
-    if not data_lines.empty:
+    if len(ts.time) > 0:
         if filetype not in session_writers:
-            header = [["time"] + list(data_lines.columns)]
+            header = [["time"] + list(ts.to_dataframe().columns)]
             filename = _make_filename(scene, filetype, session_details)
             _make_csv(
                 os.path.join(str(session_details["trial_folder"]), filename),
@@ -428,8 +423,20 @@ def _save_ts(
                 session_writers,
             )
 
+        data_lines = np.column_stack(
+            [
+                ts.data[list(ts.data.keys())[i]]
+                for i in range(len(list(ts.data.keys())))
+            ]
+        )
+
         session_writers[filetype].log_row(
-            list(data_lines.reset_index().to_numpy())
+            np.column_stack(
+                (
+                    ts.time,
+                    data_lines,
+                )
+            )
         )
 
 
@@ -689,7 +696,6 @@ def end_trial(
 
     for _key, writer in session_writers.items():
         writer.close_log()
-        # writer.convert_csv()
 
     session_writers.clear()
 

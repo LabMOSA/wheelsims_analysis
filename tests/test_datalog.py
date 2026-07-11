@@ -88,52 +88,6 @@ def test_start_log():
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# %% Ending
-
-
-def test_end_log():
-    """
-    Test end_log.
-
-    Does not assert anything, but tests proper functioning (without crashing).
-    """
-    session_details: dict[str, data_logging.FileDetails] = {}
-    session_writers: dict[str, data_logging.FileLogger] = {}
-
-    data_logging.start_log(arg, session_details=session_details)
-    data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
-    )
-
-    writers = session_writers.copy()
-
-    data_logging.end_log(
-        arg, session_details=session_details, session_writers=session_writers
-    )
-
-    for key in session_writers.keys():
-        assert os.path.isfile(
-            os.path.join(
-                session_details["trial_folder"], writers[key]["filename"]
-            )
-        ), f"TEST end_log: File {key} does not exist."
-
-        csv_filename = writers[key]["filename"].split(".txt")[0] + ".csv"
-        assert os.path.isfile(
-            os.path.join(session_details["trial_folder"], csv_filename)
-        ), f"TEST end_log: File {key} not converted to csv."
-
-    assert len(session_writers.keys()) == 0, (
-        "TEST end_log: Session writers still exist."
-    )
-
-    if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
-        shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
-
-
-# %% New trial
-
-
 def test_create_trial():
     """
     Test create_trial.
@@ -170,7 +124,7 @@ def test_create_trial():
 
     writers = session_writers.copy()
 
-    data_logging.end_log(
+    data_logging.end_trial(
         arg, session_details=session_details, session_writers=session_writers
     )
     data = pd.read_csv(
@@ -191,7 +145,83 @@ def test_create_trial():
         shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
 
 
-# # # %% Saving
+# %% Ending
+
+
+def test_end_trial():
+    """
+    Test end_trial.
+
+    Assert files are saved and readable, and writers were erased.
+    """
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
+
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
+    )
+
+    writers = session_writers.copy()
+
+    data_logging.end_trial(
+        arg, session_details=session_details, session_writers=session_writers
+    )
+
+    for key in session_writers.keys():
+        assert os.path.isfile(
+            os.path.join(
+                session_details["trial_folder"], writers[key]["filename"]
+            )
+        ), f"TEST end_trial: File {key} does not exist."
+
+        file_writer = data_logging.FileLogger(
+            os.path.join(
+                session_details["trial_folder"], writers[key]["filename"]
+            )
+        )
+        assert file_writer.closed, f"File {key} is not closed."
+
+    assert len(session_writers.keys()) == 0, (
+        "TEST end_trial: Session writers still exist."
+    )
+
+    if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
+        shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
+
+
+def test_end_log():
+    """
+    Test end_log.
+
+    Assert .txt files were converted to .csv.
+    """
+    session_details: dict[str, data_logging.FileDetails] = {}
+    session_writers: dict[str, data_logging.FileLogger] = {}
+
+    data_logging.start_log(arg, session_details=session_details)
+    data_logging.create_trial(
+        arg, session_details=session_details, session_writers=session_writers
+    )
+
+    writers = session_writers.copy()
+
+    data_logging.end_trial(
+        arg, session_details=session_details, session_writers=session_writers
+    )
+    data_logging.end_log(arg, session_details=session_details)
+
+    for key in session_writers.keys():
+        csv_filename = writers[key]["filename"].split(".txt")[0] + ".csv"
+        assert os.path.isfile(
+            os.path.join(session_details["trial_folder"], csv_filename)
+        ), f"TEST end_log: File {key} not converted to csv."
+
+    if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
+        shutil.rmtree(os.path.join(arg["folder"], arg["participant"]))
+
+
+# %% Saving
 
 
 def test_save_data():
@@ -214,7 +244,7 @@ def test_save_data():
     )
     writers = session_writers.copy()
 
-    data_logging.end_log(
+    data_logging.end_trial(
         arg, session_details=session_details, session_writers=session_writers
     )
     data = pd.read_csv(
@@ -292,7 +322,7 @@ def test_save_ts():
                 os.path.join(session_details["trial_folder"], filename),
             ), f"TEST _save_ts: File {filename} is missing."
 
-    data_logging.end_log(
+    data_logging.end_trial(
         arg, session_details=session_details, session_writers=session_writers
     )
 

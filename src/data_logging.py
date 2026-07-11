@@ -15,6 +15,7 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.getcwd())))
 
 from datetime import date
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
@@ -656,7 +657,7 @@ def save_data(
                 )
 
 
-def end_log(
+def end_trial(
     arg: ArgStructure,
     session_writers: dict[str, FileLogger] = session_writers,
     session_details: dict[str, FileDetails] = session_details,
@@ -686,9 +687,9 @@ def end_log(
     if arg["motion_capture"]:
         _stop_ot(arg["scene"], session_writers, session_details)
 
-    for key, writer in session_writers.items():
+    for _key, writer in session_writers.items():
         writer.close_log()
-        writer.convert_csv()
+        # writer.convert_csv()
 
     session_writers.clear()
 
@@ -696,3 +697,28 @@ def end_log(
         "Logging is done for current session: ",
         session_details["trial_folder"],
     )
+
+
+def end_log(
+    arg: ArgStructure,
+    session_details: dict[str, FileDetails] = session_details,
+) -> None:
+    """
+    Convert all recorded files from txt to csv.
+
+    Parameters
+    ----------
+    arg :
+        Dictionary containing arguments received from Godot.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
+
+    """
+    for i in range(1, session_details["trial"] + 1):
+        trial_folder = os.path.join(
+            session_details["session_folder"], "T" + str(i)
+        )
+        files = list(Path(trial_folder).glob("*.txt"))
+        for file in files:
+            FileLogger(str(file)).convert_csv()

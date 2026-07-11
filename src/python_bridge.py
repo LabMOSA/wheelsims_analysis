@@ -55,6 +55,7 @@ COMMAND_MAPPING = {
     "start_logging": data_logging.start_log,
     "create_trial": data_logging.create_trial,
     "data_logging": data_logging.save_data,
+    "end_trial": data_logging.end_trial,
     "end_logging": data_logging.end_log,
 }
 

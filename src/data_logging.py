@@ -465,7 +465,7 @@ def _stop_wheels(
     """
     for key, wheel in wheels["wheels"].items():
         wheel.stop_streaming()
-        print("Successfully stopped stream from wheel: " + wheel.IP)
+        print("Successfully stopped stream from wheel: " + wheel.ip)
         nw = wheel.fetch(clear=True)
         for subkey, ts in nw.items():
             _save_ts(
@@ -541,13 +541,13 @@ def start_log(
     if arg["instrumented_wheels"]:
         for key, wheel in wheels["wheels"].items():
             try:
-                wheel.IP = wheels["ip_addresses"][key]
+                wheel.ip = wheels["ip_addresses"][key]
                 print(
-                    "Successfully established connection to wheel: " + wheel.IP
+                    "Successfully established connection to wheel: " + wheel.ip
                 )
             except TimeoutError:
                 print(
-                    "Connection could not be established to wheel: " + wheel.IP
+                    "Connection could not be established to wheel: " + wheel.ip
                 )
 
 
@@ -574,7 +574,7 @@ def create_trial(
     if arg["instrumented_wheels"]:
         for key, wheel in wheels["wheels"].items():
             wheel.start_streaming()
-            print("Streaming started for wheel: ", key, " of IP ", wheel.IP)
+            print("Streaming started for wheel: ", key, " of IP ", wheel.ip)
 
     if arg["motion_capture"]:
         ot.start()

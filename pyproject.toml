@@ -30,10 +30,7 @@ exclude = [
 	"MoCapData.py",
 	"NatNetClient.py",
 ]
-
-[[tool.mypy.overrides]]
-module = ["kineticstoolkit.*"]
-follow_untyped_imports = true
+disable_error_code = ["import-untyped"]
 
 [tool.coverage.run]
 omit = [

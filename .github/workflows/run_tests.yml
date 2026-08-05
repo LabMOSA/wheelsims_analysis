@@ -32,6 +32,10 @@ jobs:
         pip install -r requirements_dev.txt
     - name: Test formatting
       run: ruff format --check src
+    - name: Test code quality
+      run: ruff check --output-format=github src
+    - name: Test static typing
+      run: mypy src
     - name: Test with pytest and crash on warnings
       run: |
         export PYTHONPATH=":src"

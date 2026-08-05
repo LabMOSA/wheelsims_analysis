@@ -8,22 +8,16 @@ well as information collected through the instrumented wheels.
 
 import glob
 import os
-import sys
-
-import pandas as pd
-
-sys.path.append(os.path.dirname(os.path.dirname(os.getcwd())))
-
 from datetime import date
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
-import wheelsims_analysis.src.optitrack as ot
-from wheelsims_analysis.src.nextwheel_repo.software.python.nextwheel import (
-    NextWheel,
-)
+import pandas as pd
+from nextwheel import NextWheel
+
+import optitrack as ot
 
 # %% Session dictionaries
 
@@ -56,7 +50,7 @@ class FileLogger:
             self.filename, "w", encoding="utf-8", buffering=1024 * 1024
         )
 
-    def log_row(self, data_lines: list) -> None:
+    def log_row(self, data_lines: np.ndarray) -> None:
         """
         Log data to self.file.
 
@@ -91,7 +85,7 @@ class FileLogger:
 session_writers: dict[str, FileLogger] = {}
 
 
-class FileDetails(TypedDict):
+class FileDetails(TypedDict, total=False):
     """
     Structure of the dictionary containing details about current trial.
 
@@ -117,7 +111,7 @@ class FileDetails(TypedDict):
     trial_folder: str
 
 
-session_details: dict[str, FileDetails] = {}
+session_details = FileDetails()
 
 
 class ArgStructure(TypedDict):
@@ -248,8 +242,8 @@ def _get_number(folder: str) -> int:
 
 
 def _make_header(
-    data_headers: list[str] = ["position", "rotation"],
-    data_columns: list[int] = [4, 4],
+    data_headers: list[str],
+    data_columns: list[int],
 ) -> list[list[str]]:
     """
     Create a header appropriate for the type of data to be saved.
@@ -258,10 +252,10 @@ def _make_header(
     ----------
     data_headers
         The specific column titles to be saved in the CSV file.
-        The default is ['position', 'rotation'] for the Simulator position.
+        For player_trajectory, the input should be ['position', 'rotation'].
     data_columns
         The number of columns per column title.
-        The default is [4, 4] for the Simulator position.
+        For player_trajectory, the input should be [4, 4].
 
     Returns
     -------
@@ -283,7 +277,7 @@ def _make_header(
 def _make_filename(
     scene: str,
     data_type: str,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> str:
     """
     Create a filename appropriate for the trajectory data to be saved.
@@ -350,7 +344,7 @@ def _make_csv(
     """
     session_writers[filetype] = FileLogger(filename)
     session_writers[filetype].open_log()
-    session_writers[filetype].log_row(header)
+    session_writers[filetype].log_row(np.array(header))
 
 
 # %% Logging simulator
@@ -380,7 +374,7 @@ def _save_trajectory(
         + ["0"]
     ]
 
-    session_writers["player_trajectory"].log_row(data_line)
+    session_writers["player_trajectory"].log_row(np.array(data_line))
 
 
 # %% Logging TimeSeries
@@ -391,7 +385,7 @@ def _save_ts(
     filetype: str,
     scene: str,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Open and append data to CSV file containing time series data.
@@ -446,7 +440,7 @@ def _save_ts(
 def _stop_wheels(
     scene: str,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Stop instrumented wheels streaming and catch final events.
@@ -480,7 +474,7 @@ def _stop_wheels(
 def _stop_ot(
     scene: str,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ):
     """
     Stop Optitrack streaming and catch final events.
@@ -511,7 +505,7 @@ def _stop_ot(
 
 def start_log(
     arg: ArgStructure,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Create folders for furrent (new) session, in which trials will be saved.
@@ -554,7 +548,7 @@ def start_log(
 def create_trial(
     arg: ArgStructure,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Create empty files where data will be saved during this current trial.
@@ -611,7 +605,7 @@ def create_trial(
 def save_data(
     arg: ArgStructure,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Open and append new data line to trajectory and instrumented wheels files.
@@ -667,7 +661,7 @@ def save_data(
 def end_trial(
     arg: ArgStructure,
     session_writers: dict[str, FileLogger] = session_writers,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Confirm the end of recording and terminate instrumented wheels streaming.
@@ -707,7 +701,7 @@ def end_trial(
 
 def end_log(
     arg: ArgStructure,
-    session_details: dict[str, FileDetails] = session_details,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Convert all recorded files from txt to csv.

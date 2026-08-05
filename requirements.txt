@@ -3,3 +3,4 @@ websocket-client>=1
 matplotlib>=3
 requests>=2
 kineticstoolkit>=0.16
+git+https://github.com/felixchenier/NextWheel.git#subdirectory=software/python

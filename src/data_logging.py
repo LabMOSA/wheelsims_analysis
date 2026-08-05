@@ -6,23 +6,112 @@ well as information collected through the instrumented wheels.
 
 """
 
-import csv
 import glob
 import os
 from datetime import date
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
+import pandas as pd
+from nextwheel import NextWheel
 
-from src.nextwheel_repo.software.python.nextwheel import NextWheel
+import optitrack as ot
 
-# %% Instrumented Wheels dictionary
+# %% Session dictionaries
 
 wheels = {
-    "right": NextWheel(),
-    # "left": NextWheel(),
+    "wheels": {
+        "right": NextWheel(),
+        # "left": NextWheel(),
+    },
+    "ip_addresses": {
+        "right": "192.168.0.86",
+        "left": "192.168.0.13",
+    },
 }
+
+
+# %% Classes to hold data and arguments
+
+
+class FileLogger:
+    """FileLogger class holds an open file of filename."""
+
+    def __init__(self, filename):
+        """Initialize FileLogger object."""
+        self.filename = filename
+        self.file = None
+
+    def open_log(self) -> None:
+        """Open file and create writer object."""
+        self.file = open(
+            self.filename, "w", encoding="utf-8", buffering=1024 * 1024
+        )
+
+    def log_row(self, data_lines: np.ndarray) -> None:
+        """
+        Log data to self.file.
+
+        Parameters
+        ----------
+        data_lines :
+            Data to append to the file.
+
+        Raises
+        ------
+        ValueError
+            Error is raised when trying to write to a closed file.
+        """
+        if self.file and not self.file.closed:
+            for row in data_lines:
+                self.file.write("\t".join(map(str, row)) + "\n")
+
+        else:
+            raise ValueError(f"File {self.filename} is closed.")
+
+    def close_log(self) -> None:
+        """Close an opened file."""
+        if self.file:
+            self.file.close()
+
+    def convert_csv(self) -> None:
+        """Convert the written file from .txt to .csv."""
+        txt_data = pd.read_csv(self.filename, sep="\t")
+        txt_data.to_csv(self.filename.split(".txt")[0] + ".csv", index=False)
+
+
+session_writers: dict[str, FileLogger] = {}
+
+
+class FileDetails(TypedDict, total=False):
+    """
+    Structure of the dictionary containing details about current trial.
+
+    participant_folder:
+        The current participant folder where data is saved for all sessions.
+    session:
+        The current session number.
+    session_date:
+        The current session date.
+    session_folder:
+        The current participant folder where data is saved for this session.
+    trial:
+        The current trial number.
+    trial_folder:
+        The current participant folder where data is saved for this trial.
+    """
+
+    participant_folder: str
+    session: int
+    session_date: str
+    session_folder: str
+    trial: int
+    trial_folder: str
+
+
+session_details = FileDetails()
 
 
 class ArgStructure(TypedDict):
@@ -30,23 +119,23 @@ class ArgStructure(TypedDict):
     Structure of the dictionary containing arguments received from Godot.
 
     folder:
-        the main folder where all data is saved.
+        The main folder where all data is saved.
     participant:
-        the current participant identifier.
+        The current participant identifier.
     time:
-        the current timestamp.
+        The current timestamp.
     scene:
-        the current selected playable scene.
+        The current selected playable scene.
     player_trajectory:
-        whether to save the player's trajectory.
+        Whether to save the player's trajectory.
     instrumented_wheels:
-        whether to save the wheels.
+        Whether to save the wheels.
     motion_capture:
-        whether to save the motion capture.
+        Whether to save the motion capture.
     position:
-        the current player position in the simulator.
+        The current player position in the simulator.
     rotation:
-        the current player rotation in the simulator.
+        The current player rotation in the simulator.
 
     """
 
@@ -152,17 +241,21 @@ def _get_number(folder: str) -> int:
 # %% File generation
 
 
-def _make_header(data_type: str) -> list[str]:
+def _make_header(
+    data_headers: list[str],
+    data_columns: list[int],
+) -> list[list[str]]:
     """
     Create a header appropriate for the type of data to be saved.
 
     Parameters
     ----------
-    data_type
-        The type of data to be saved from Simulator or instrumented wheels.
-        Options are:
-            Simulator (through Godot): trajectory.
-            NextWheel: Analog, IMU, Encoder, Power.
+    data_headers
+        The specific column titles to be saved in the CSV file.
+        For player_trajectory, the input should be ['position', 'rotation'].
+    data_columns
+        The number of columns per column title.
+        For player_trajectory, the input should be [4, 4].
 
     Returns
     -------
@@ -170,79 +263,38 @@ def _make_header(data_type: str) -> list[str]:
         Header to be used when creating the CSV file.
 
     """
-    data_to_save, data_columns = _select_header(data_type)
-    header = ["time"] + [
-        data_to_save[i] + "[:," + str(j) + "]"
-        for i in range(len(data_to_save))
-        for j in range(data_columns[i])
+    header = [
+        ["time"]
+        + [
+            data_headers[i] + "[:," + str(j) + "]"
+            for i in range(len(data_headers))
+            for j in range(data_columns[i])
+        ]
     ]
     return header
 
 
-def _select_header(
-    data_type: str,
-    data_headers={
-        "headers": {
-            "trajectory": ["position", "rotation"],
-            "Analog": ["Channels", "Force", "Moment"],
-            "IMU": ["Acc", "Gyro", "Mag"],
-            "Encoder": ["Angle"],
-            "Power": ["Voltage", "Current", "Power"],
-        },
-        "columns": {
-            "trajectory": [4, 4],
-            "Analog": [7, 4, 4],
-            "IMU": [3, 3, 3],
-            "Encoder": [1],
-            "Power": [1, 1, 1],
-        },
-    },
-) -> tuple[list[str], list[int]]:
-    """
-    Select the column titles and number of columns for the CSV file's header.
-
-    Parameters
-    ----------
-    data_type :
-        The type of data to be saved from Simulator or instrumented wheels.
-        Options are:
-            Simulator (through Godot): trajectory.
-            NextWheel: Analog, IMU, Encoder, Power.
-    data_headers :
-        The default columns headers and numbers for each type of data to save.
-
-    Returns
-    -------
-    data_to_save
-        The specific column titles to be saved in the CSV file.
-    data_columns
-        The number of columns per column title.
-
-    """
-    data_to_save = data_headers["headers"][data_type]
-    data_columns = data_headers["columns"][data_type]
-    return data_to_save, data_columns
-
-
 def _make_filename(
-    session: str, trial: str, scene: str, data_type: str
+    scene: str,
+    data_type: str,
+    session_details: FileDetails = session_details,
 ) -> str:
     """
     Create a filename appropriate for the trajectory data to be saved.
 
     Parameters
     ----------
-    session :
-        Current session number.
-    trial :
-        Current trial number.
     scene :
         Current playable scene selected (out of 6 options).
-    data_type:
+    data_type :
         The type of data to be saved from Simulator or instrumented wheels.
         Options are:
             Simulator (through Godot): trajectory.
             NextWheel: Analog, IMU, Encoder, Power.
+            Optitrack: RigidBody + ID.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     Returns
     -------
@@ -252,337 +304,421 @@ def _make_filename(
     """
     file = (
         "S"
-        + session
+        + str(session_details["session"])
         + "_"
-        + str(date.today())
+        + str(session_details["session_date"])
         + "_"
         + "T"
-        + trial
+        + str(session_details["trial"])
         + "_"
         + scene
         + "_"
         + data_type
-        + ".csv"
+        + ".txt"
     )
 
     return file
 
 
-def _make_csv(folder: str, filename: str, header: list[str]) -> None:
+def _make_csv(
+    filename: str,
+    header: list[list[str]],
+    filetype: str,
+    session_writers: dict[str, FileLogger] = session_writers,
+) -> None:
     """
     Create a CSV file of a particular header within specified folder.
 
     Parameters
     ----------
-    folder
-        Sub-folder corresponding to current participant.
-    filename
+    filename :
         Name of file to be created.
-    header
+    header :
         Header of file to be created.
+    filetype :
+        Type of file to be created, used as key in session_writers.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
 
     """
-    with open(
-        os.path.join(folder, filename), "w", newline="", encoding="utf-8"
-    ) as file:
-        writer = csv.writer(file)
-        writer.writerow(header)
-
-
-def _create_wheels(
-    trial_folder: str,
-    session: int,
-    trial: int,
-    scene: str,
-    side: str,
-) -> None:
-    """
-    Create and save CSV files to hold instrumented wheels data and events.
-
-    Parameters
-    ----------
-    trial_folder
-        The folder containing data for the current trial in-progress.
-    session
-        The current session number.
-    trial
-        The current trial number.
-    scene
-        The current playable scene selected.
-    side
-        The specific wheel for which recording must be stopped.
-
-    """
-    for key in ["Analog", "IMU", "Encoder", "Power"]:
-        header = _make_header(key)
-        filename = _make_filename(
-            str(session), str(trial), scene, side + "_" + key
-        )
-        _make_csv(trial_folder, filename, header)
+    session_writers[filetype] = FileLogger(filename)
+    session_writers[filetype].open_log()
+    session_writers[filetype].log_row(np.array(header))
 
 
 # %% Logging simulator
 
 
-def _save_trajectory(filename: str, data_values: dict[str, str]) -> None:
+def _save_trajectory(
+    data_values: dict[str, str],
+    session_writers: dict[str, FileLogger] = session_writers,
+) -> None:
     """
-    Open and append data to an already-created CSV file containing trajectory.
+    Open and append data to an existing CSV file containing trajectory.
 
     Parameters
     ----------
-    filename
-        Name of the file in which current trial's data is saved.
-    data_values
+    data_values :
         Current data values to save.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
 
     """
-    timestamp = data_values["time"]
-
-    data_line = (
-        [timestamp]
+    data_line = [
+        [data_values["time"]]
         + list(data_values["position"].strip("()").split(","))
         + ["1"]
         + list(data_values["rotation"].strip("()").split(","))
         + ["0"]
-    )
+    ]
 
-    with open(filename, "a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(data_line)
+    session_writers["player_trajectory"].log_row(np.array(data_line))
 
 
-# %% Logging instrumented wheels
+# %% Logging TimeSeries
 
 
-def _save_wheels(
+def _save_ts(
     ts: ktk.TimeSeries,
-    filename: str,
-    trial_folder: str,
+    filetype: str,
+    scene: str,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
-    Open and append data to instrumented wheels data dictionary.
+    Open and append data to CSV file containing time series data.
 
     Parameters
     ----------
     ts :
-        Newly-fetched data from NextWheel.
-    filename :
-        Name of file to save to.
-    trial_folder
-        Current trial folder.
+        Newly-fetched data from NextWheel or Optitrack.
+    filetype :
+        Type of file to be created, used as key in session_writers.
+    scene :
+        Current scene.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    data_lines = np.column_stack(
-        [ts.time] + [ts.data[subkey] for subkey in ts.data]
-    )
+    if len(ts.time) > 0:
+        if filetype not in session_writers:
+            header = [["time"] + list(ts.to_dataframe().columns)]
+            filename = _make_filename(scene, filetype, session_details)
+            _make_csv(
+                os.path.join(str(session_details["trial_folder"]), filename),
+                header,
+                filetype,
+                session_writers,
+            )
 
-    with open(
-        os.path.join(trial_folder, filename),
-        "a",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-        writer = csv.writer(file)
-        writer.writerows(data_lines)
+        data_lines = np.column_stack(
+            [
+                ts.data[list(ts.data.keys())[i]]
+                for i in range(len(list(ts.data.keys())))
+            ]
+        )
+
+        session_writers[filetype].log_row(
+            np.column_stack(
+                (
+                    ts.time,
+                    data_lines,
+                )
+            )
+        )
+
+
+# %% Stopping devices external to Simulator
 
 
 def _stop_wheels(
-    session: str,
-    trial_folder: str,
-    trial: str,
     scene: str,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Stop instrumented wheels streaming and catch final events.
 
     Parameters
     ----------
-    session :
-        Current session number.
-    trial_folder :
-        Current trial folder.
-    trial :
-        The current trial number.
     scene :
-        The current scene.
+        Current scene.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    for key, wheel in wheels.items():
+    for key, wheel in wheels["wheels"].items():
         wheel.stop_streaming()
+        print("Successfully stopped stream from wheel: " + wheel.ip)
         nw = wheel.fetch(clear=True)
         for subkey, ts in nw.items():
-            filename = _make_filename(
-                session, trial, scene, key + "_" + subkey
+            _save_ts(
+                ts,
+                key + "_" + subkey,
+                "instrumented_wheels",
+                session_writers,
+                session_details,
             )
-            _save_wheels(ts, filename, trial_folder)
-            print("Successfully stopped stream from wheel: " + wheel.IP)
+
+
+def _stop_ot(
+    scene: str,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
+):
+    """
+    Stop Optitrack streaming and catch final events.
+
+    Parameters
+    ----------
+    scene:
+        Current scene.
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
+
+    """
+    motion = ot.fetch(clear_buffer=True, transform_data=False)
+    ot.stop()
+    print("Streaming ended for optitrack.")
+    for ID, ts in motion.items():
+        if len(ID) == 3:
+            _save_ts(
+                ts, "rigidbody_" + ID, scene, session_writers, session_details
+            )
 
 
 # %% Public functions
+
+
 def start_log(
     arg: ArgStructure,
-    ip_addresses: dict[str, str] = {
-        "right": "192.168.0.86",
-        "left": "192.168.0.13",
-    },
+    session_details: FileDetails = session_details,
 ) -> None:
     """
-    Create folders for current (new) session, in which trials will be saved.
+    Create folders for furrent (new) session, in which trials will be saved.
 
     Parameters
     ----------
     arg
         Dictionary containing arguments received from Godot.
-    ip_addresses
-        Optional. The two IP addresses corresponding to the right and the left
-        wheels. The default is {"right": "192.168.0.86", "left": "0.0.0.0"}
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    folder = _make_folder(arg["folder"], arg["participant"])
-    _ = _get_number(folder)
-    _ = _make_folder(
-        arg["folder"], arg["participant"], session=str(date.today())
+    session_details["session_date"] = str(date.today())
+    session_details["participant_folder"] = _make_folder(
+        arg["folder"], arg["participant"]
+    )
+    session_details["session_folder"] = _make_folder(
+        arg["folder"],
+        arg["participant"],
+        session=session_details["session_date"],
+    )
+    session_details["session"] = _get_number(
+        session_details["participant_folder"]
     )
 
     if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
+        for key, wheel in wheels["wheels"].items():
             try:
-                wheel.IP = ip_addresses[key]
+                wheel.ip = wheels["ip_addresses"][key]
                 print(
-                    "Successfully established connection to wheel: " + wheel.IP
+                    "Successfully established connection to wheel: " + wheel.ip
                 )
             except TimeoutError:
                 print(
-                    "Connection could not be established to wheel: " + wheel.IP
+                    "Connection could not be established to wheel: " + wheel.ip
                 )
 
 
 def create_trial(
     arg: ArgStructure,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Create empty files where data will be saved during this current trial.
 
     Parameters
     ----------
-    arg
+    arg :
         Dictionary containing arguments received from Godot.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_number(folder)
+    if arg["instrumented_wheels"]:
+        for key, wheel in wheels["wheels"].items():
+            wheel.start_streaming()
+            print("Streaming started for wheel: ", key, " of IP ", wheel.ip)
 
-    session_folder = _make_folder(
-        arg["folder"], arg["participant"], session=str(date.today())
+    if arg["motion_capture"]:
+        ot.start()
+        print("Streaming started for Optitrack.")
+
+    session_details["trial"] = (
+        _get_number(session_details["session_folder"]) + 1
     )
-    trial = _get_number(session_folder) + 1
 
-    trial_folder = _make_folder(
+    session_details["trial_folder"] = _make_folder(
         arg["folder"],
         arg["participant"],
-        session=str(date.today()),
-        trial="T" + str(trial),
+        session=session_details["session_date"],
+        trial="T" + str(session_details["trial"]),
     )
 
     if arg["player_trajectory"]:
         filename = _make_filename(
-            str(session), str(trial), arg["scene"], "trajectory"
+            arg["scene"],
+            "trajectory",
+            session_details,
         )
-        header = _make_header("trajectory")
-        _make_csv(trial_folder, filename, header)
+
+        header = _make_header(["position", "rotation"], [4, 4])
+        _make_csv(
+            os.path.join(session_details["trial_folder"], filename),
+            header,
+            "player_trajectory",
+            session_writers,
+        )
         print("Created the file " + filename)
-
-    if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
-            wheel.start_streaming()
-            print("Streaming started for wheel: " + wheel.IP)
-
-            _create_wheels(trial_folder, session, trial, arg["scene"], key)
 
 
 def save_data(
     arg: ArgStructure,
-    trajectory: list[str] = ["time", "position", "rotation"],
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Open and append new data line to trajectory and instrumented wheels files.
 
     Parameters
     ----------
-    arg
+    arg :
         Dictionary containing arguments received from Godot.
-    trajectory
-        The different data types related to the trajectory to be saved.
-        The default is ["time", "position", "rotation"].
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    trial = _get_number(
-        os.path.join(arg["folder"], arg["participant"], str(date.today()))
-    )
-    session = _get_number(os.path.join(arg["folder"], arg["participant"]))
-    trial_folder = _make_folder(
-        arg["folder"],
-        arg["participant"],
-        session=str(date.today()),
-        trial="T" + str(trial),
-    )
+    if arg["player_trajectory"]:
+        trajectory_data = _get_subset(arg, ["time", "position", "rotation"])
 
-    trajectory_file = _make_filename(
-        str(session), str(trial), arg["scene"], "trajectory"
-    )
-
-    trajectory_data = _get_subset(arg, trajectory)
-
-    if (trajectory_data[trajectory[1]] is not None) or (
-        trajectory_data[trajectory[2]] is not None
-    ):
-        _save_trajectory(
-            os.path.join(trial_folder, trajectory_file), trajectory_data
-        )
+        if (trajectory_data["position"] is not None) or (
+            trajectory_data["rotation"] is not None
+        ):
+            _save_trajectory(
+                trajectory_data,
+                session_writers,
+            )
 
     if arg["instrumented_wheels"]:
-        for key, wheel in wheels.items():
-            wheel.stop_streaming()
+        for key, wheel in wheels["wheels"].items():
             nw = wheel.fetch(clear=True)
             for subkey, ts in nw.items():
-                filename = _make_filename(
-                    str(session), str(trial), arg["scene"], key + "_" + subkey
+                _save_ts(
+                    ts,
+                    key + "_" + subkey,
+                    arg["scene"],
+                    session_writers,
+                    session_details,
                 )
-                _save_wheels(ts, filename, trial_folder)
+
+    if arg["motion_capture"]:
+        motion = ot.fetch(clear_buffer=True, transform_data=False)
+        for ID, ts in motion.items():
+            if len(ID) == 3:
+                _save_ts(
+                    ts,
+                    "rigidbody_" + ID,
+                    arg["scene"],
+                    session_writers,
+                    session_details,
+                )
 
 
-def end_log(
+def end_trial(
     arg: ArgStructure,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Confirm the end of recording and terminate instrumented wheels streaming.
 
     Parameters
     ----------
-    arg
+    arg :
         Dictionary containing arguments received from Godot.
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
 
     """
-    folder = _make_folder(arg["folder"], arg["participant"])
-    session = _get_number(folder)
-    session_folder = _make_folder(
-        arg["folder"], arg["participant"], session=str(date.today())
-    )
-    trial = _get_number(session_folder)
-    trial_folder = _make_folder(
-        arg["folder"],
-        arg["participant"],
-        session=str(date.today()),
-        trial="T" + str(trial),
-    )
-
     if arg["instrumented_wheels"]:
         _stop_wheels(
-            str(session),
-            trial_folder,
-            str(trial),
             arg["scene"],
-            wheels=wheels,
+            session_writers,
+            session_details,
         )
 
-    print("Logging is done for current session: ", trial_folder)
+    if arg["motion_capture"]:
+        _stop_ot(arg["scene"], session_writers, session_details)
+
+    for _key, writer in session_writers.items():
+        writer.close_log()
+
+    session_writers.clear()
+
+    print(
+        "Logging is done for current session: ",
+        session_details["trial_folder"],
+    )
+
+
+def end_log(
+    arg: ArgStructure,
+    session_details: FileDetails = session_details,
+) -> None:
+    """
+    Convert all recorded files from txt to csv.
+
+    Parameters
+    ----------
+    arg :
+        Dictionary containing arguments received from Godot.
+    session_details :
+        Dictionary holding folder details for current session/trial.
+        The default is session_details.
+
+    """
+    for i in range(1, session_details["trial"] + 1):
+        trial_folder = os.path.join(
+            session_details["session_folder"], "T" + str(i)
+        )
+        files = list(Path(trial_folder).glob("*.txt"))
+        for file in files:
+            FileLogger(str(file)).convert_csv()

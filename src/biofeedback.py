@@ -20,7 +20,7 @@ import numpy as np
 
 import optitrack as ot
 import propulsion_patterns
-from bridge_package import sender
+from python_bridge import sender
 
 # %% Public variables
 # Current analysis window (n s).

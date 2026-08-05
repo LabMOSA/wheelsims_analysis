@@ -489,6 +489,7 @@ def classify_push_pattern(
     in_push_time: float | None = None,
     end_push_time: float | None = None,
     recovery_time: float | None = None,
+    *,
     max_deviation_threshold: float = MAX_DEVIATION_THRESHOLD,
     pattern_a2_sc_threshold: float = PATTERN_A2_SC_THRESHOLD,
     pattern_a2_slop_threshold: float = PATTERN_A2_SLOP_THRESHOLD,

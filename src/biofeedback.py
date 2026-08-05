@@ -817,7 +817,8 @@ def _execute_analysis_pipeline(
 # %% Main
 if __name__ == "__main__":
     """
-    Execution script for online real-time biofeedback.
+    Execution script for testing the script in standalone. Normally the
+    biofeedback functions are called by Godot using the python bridge.
 
     This script is directly functional out-of-the-box. To run it, ensure you:
     1. Start the live data streaming from Motive (OptiTrack).

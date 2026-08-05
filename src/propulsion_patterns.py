@@ -1,5 +1,5 @@
 """
-Detect, segment, and classify wheelchair propulsion patterns.
+Detect, segment, and classify propulsion patterns based on kinematics.
 
 Coordinate System & Reference Frame Conventions
 ------------------------------------------------

@@ -26,6 +26,7 @@ import json
 import os
 import socket
 import time
+from typing import Any
 
 import biofeedback
 import data_logging
@@ -41,7 +42,7 @@ _private_vars = {
     "sock": None,
 }
 
-_running_commands = {}
+_running_commands: dict[str, dict[str, Any]] = {}
 
 
 def _close(args=None):

@@ -22,7 +22,10 @@ as Kinetics Toolkit Timeseries.
 """
 
 __author__ = "Laboratoire de recherche en mobilité et systèmes adaptés"
-__copyright__ = "Copyright (C) 2024-2026 Laboratoire de recherche en mobilité et systèmes adaptés"
+__copyright__ = (
+    "Copyright (C) 2024-2026 Laboratoire de recherche en mobilité et systèmes "
+    "adaptés"
+)
 __email__ = "chenier.felix@uqam.ca"
 __license__ = "Apache 2.0"
 
@@ -86,8 +89,7 @@ def receive_rigid_body_frame(
 
 def fetch() -> dict[str, ktk.TimeSeries]:
     """
-    Get the trajectory of all received rigid bodies as TimeSeries of
-    transforms.
+    Get all received rigid bodies as TimeSeries of transforms.
 
     Returns a dictionary of TimeSeries where each key is the ID of the rigid
     body in Motive, and the TimeSeries contains one transform series. The max

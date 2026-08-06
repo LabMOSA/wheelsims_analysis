@@ -29,7 +29,7 @@ import time
 from typing import Any
 
 import biofeedback
-import data_logging
+#import data_logging
 
 from . import sender
 
@@ -56,11 +56,11 @@ COMMAND_MAPPING = {
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
     "close": _close,
-    "start_logging": data_logging.start_log,
-    "create_trial": data_logging.create_trial,
-    "data_logging": data_logging.save_data,
-    "end_trial": data_logging.end_trial,
-    "end_logging": data_logging.end_log,
+    #"start_logging": data_logging.start_log,
+    #"create_trial": data_logging.create_trial,
+    #"data_logging": data_logging.save_data,
+    #"end_trial": data_logging.end_trial,
+    #"end_logging": data_logging.end_log,
 }
 
 

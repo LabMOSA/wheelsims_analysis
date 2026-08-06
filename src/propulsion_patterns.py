@@ -377,7 +377,12 @@ def analyse_propulsion_cycle(
 
     delta_t = ts_calc.time[-1] - ts_calc.time[0]
 
-    ts_normalised = ts_calc.resample(np.linspace(0, 100, 101))
+    ts_calc = ts_calc.add_event(ts_calc.time[0], "in_push")
+    ts_calc = ts_calc.add_event(ts_calc.time[-1], "end_push")
+
+    ts_normalised = ktk.cycles.time_normalize(
+        ts_calc, "in_push", "end_push", n_points=101
+    )
     normalised_push_pattern = ts_normalised.data[key_data][:, 0:3]
 
     vel_x = ts_calc.data[f"{key_data}_df"]
@@ -591,8 +596,10 @@ def classify_push_pattern(
 
 def plot_bilateral_cycles(
     dict_ts_propulsion_cycles: dict[Literal["left", "right"], ktk.TimeSeries],
-    dict_cycles: dict[Literal["left", "right"], list[AnalyzedCycle]]
-    | dict[Literal["left", "right"], list[SegmentedCycle]],
+    dict_cycles: (
+        dict[Literal["left", "right"], list[AnalyzedCycle]]
+        | dict[Literal["left", "right"], list[SegmentedCycle]]
+    ),
 ) -> None:
     """
     Plot bilateral hand kinematics with highlighted propulsion cycles.

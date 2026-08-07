@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   
 jobs:
-  unittests:
+  tests:
     defaults:
       run:
         shell: bash -l {0}
@@ -19,8 +19,6 @@ jobs:
         
     steps:
     - uses: actions/checkout@v7
-      with:
-        submodules: recursive
     - id: install-python
       uses: actions/setup-python@v6
       with:

@@ -7,17 +7,17 @@ reality it's always "streaming"), and fetch data.
 
 """
 
-import nextwheel
-import time
-import kineticstoolkit as ktk
 import os
-import numpy as np
+import time
 
+import nextwheel
 
 this_dir = os.path.dirname(__file__)
 
 
 class NextWheel:
+    """A dummy class that mimics a real NextWheel."""
+
     def __init__(self):
 
         # Read dummy data

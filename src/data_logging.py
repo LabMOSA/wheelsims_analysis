@@ -571,6 +571,9 @@ def create_trial(
         The default is session_details.
 
     """
+    if session_details["session_date"] == None:
+        start_log(arg, session_details)
+
     if arg["instrumented_wheels"]:
         for key, wheel in wheels["wheels"].items():
             wheel.start_streaming()
@@ -628,6 +631,11 @@ def save_data(
         The default is session_details.
 
     """
+    if session_details["session_date"] == None:
+        start_log(arg, session_details)
+    if len(session_writers.keys()) == 0:
+        create_trial(arg, session_writers, session_details)
+
     if arg["player_trajectory"]:
         trajectory_data = _get_subset(arg, ["time", "position", "rotation"])
 

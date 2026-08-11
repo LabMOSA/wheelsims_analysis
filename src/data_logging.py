@@ -78,8 +78,14 @@ class FileLogger:
 
     def convert_csv(self) -> None:
         """Convert the written file from .txt to .csv."""
-        txt_data = pd.read_csv(self.filename, sep="\t")
-        txt_data.to_csv(self.filename.split(".txt")[0] + ".csv", index=False)
+        try:
+            txt_data = pd.read_csv(self.filename, sep="\t")
+            if len(txt_data) > 0:
+                txt_data.to_csv(
+                    self.filename.split(".txt")[0] + ".csv", index=False
+                )
+        except:
+            print(f"Could not convert {self.filename} to .csv")
 
 
 session_writers: dict[str, FileLogger] = {}
@@ -701,6 +707,7 @@ def end_trial(
 
 def end_log(
     arg: ArgStructure,
+    session_writers: dict[str, FileLogger] = session_writers,
     session_details: FileDetails = session_details,
 ) -> None:
     """
@@ -715,6 +722,9 @@ def end_log(
         The default is session_details.
 
     """
+    if len(session_writers) > 0:
+        end_trial(arg, session_writers, session_details)
+
     for i in range(1, session_details["trial"] + 1):
         trial_folder = os.path.join(
             session_details["session_folder"], "T" + str(i)

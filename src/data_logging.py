@@ -78,14 +78,8 @@ class FileLogger:
 
     def convert_csv(self) -> None:
         """Convert the written file from .txt to .csv."""
-        try:
-            txt_data = pd.read_csv(self.filename, sep="\t")
-            if len(txt_data) > 0:
-                txt_data.to_csv(
-                    self.filename.split(".txt")[0] + ".csv", index=False
-                )
-        except:
-            print(f"Could not convert {self.filename} to .csv")
+        txt_data = pd.read_csv(self.filename, sep="\t")
+        txt_data.to_csv(self.filename.split(".txt")[0] + ".csv", index=False)
 
 
 session_writers: dict[str, FileLogger] = {}
@@ -571,7 +565,7 @@ def create_trial(
         The default is session_details.
 
     """
-    if session_details["session_date"] == None:
+    if session_details["session_date"] is None:
         start_log(arg, session_details)
 
     if arg["instrumented_wheels"]:
@@ -631,9 +625,9 @@ def save_data(
         The default is session_details.
 
     """
-    if session_details["session_date"] == None:
+    if session_details["session_date"] is None:
         start_log(arg, session_details)
-    if len(session_writers.keys()) == 0:
+    if not session_writers:
         create_trial(arg, session_writers, session_details)
 
     if arg["player_trajectory"]:

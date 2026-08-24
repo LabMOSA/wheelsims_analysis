@@ -79,7 +79,10 @@ class FileLogger:
     def convert_csv(self) -> None:
         """Convert the written file from .txt to .csv."""
         txt_data = pd.read_csv(self.filename, sep="\t")
-        txt_data.to_csv(self.filename.split(".txt")[0] + ".csv", index=False)
+        if not os.path.exists(self.filename.split(".txt")[0] + ".csv"):
+            txt_data.to_csv(
+                self.filename.split(".txt")[0] + ".csv", index=False
+            )
 
 
 session_writers: dict[str, FileLogger] = {}
@@ -314,7 +317,7 @@ def _make_header(
     Returns
     -------
     list[str]
-        Header to be used when creating the CSV file.
+        Header to be used when creating the file.
 
     """
     header = [
@@ -355,7 +358,7 @@ def _save_trajectory(
     session_writers: dict[str, FileLogger] = session_writers,
 ) -> None:
     """
-    Append data to an existing CSV file containing trajectory.
+    Append data to an open file containing trajectory.
 
     Parameters
     ----------
@@ -388,7 +391,7 @@ def _save_ts(
     session_details: FileDetails = session_details,
 ) -> None:
     """
-    Open and append data to CSV file containing time series data.
+    Open and append data to open file containing time series data.
 
     Parameters
     ----------
@@ -625,8 +628,6 @@ def save_data(
         The default is session_details.
 
     """
-    if session_details["session_date"] is None:
-        start_log(arg, session_details)
     if not session_writers:
         create_trial(arg, session_writers, session_details)
 

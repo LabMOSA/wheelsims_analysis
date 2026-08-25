@@ -12,12 +12,11 @@ sys.path.append(root_dir)
 
 
 import biofeedback_pushrim_kinetics
-from nextwheel_dummy import NextWheel
 
 
-nw = NextWheel()
 
+biofeedback_pushrim_kinetics.init()
 while True:
-    biofeedback_pushrim_kinetics.calculate_pushrim_kinetics_biofeedback(nw)
+    biofeedback_pushrim_kinetics.process()
     plt.pause(0.1)
     plt.cla()

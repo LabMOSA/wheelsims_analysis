@@ -15,16 +15,38 @@ N_POINTS = 300  # Number of points in the rolling plot
 N_PUSHES = 3  # Number of pushes to calculate on
 
 
+
+class GlobalVariables():
+    """Contain the module's global variables."""
+    # The NextWheel instance
+    nw: NextWheel | NextWheelDummy = NextWheelDummy()
+
+
+global_variables = GlobalVariables()
+
+
+def init(**kwargs) -> None:
+    """Create the NextWheel instance."""
+    pass
+
+
+def process(**kwargs) -> None:
+    """Run the process once."""
+    data = global_variables.nw.fetch()
+    out = calculate_pushrim_kinetics_biofeedback(data)
+    print(out)
+
+
 def calculate_pushrim_kinetics_biofeedback(
-    nw: NextWheel | NextWheelDummy, *, show_plot: bool = False
+    data: dict[str, ktk.TimeSeries], *, show_plot: bool = False
 ) -> dict[str, Any]:
     """
     Calculate pushrim kinetics biofeedback.
 
     Parameters
     ----------
-    nw
-        The NextWheel instance to fetch data from.
+    data
+        Dictionary of TimeSeries as returned by NextWheel.fetch().
     show_plot
         Optional. True to show a plot of the processed data.
 
@@ -37,9 +59,6 @@ def calculate_pushrim_kinetics_biofeedback(
         - "Ftot": the Ftot curve, in newton.
 
     """
-    # Fetch the most recent data
-    data = nw.fetch()
-
     # Keep the last seconds
     if data["Analog"].time[-1] - TIME_SPAN > data["Analog"].time[0]:
         data["Analog"] = data["Analog"].get_ts_after_time(

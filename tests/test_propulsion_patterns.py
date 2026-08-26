@@ -356,6 +356,10 @@ def test_analyse_propulsion_cycle(_push_pattern_cycles_data):
         dict_push_pattern_cycle[next(iter(dict_push_pattern_cycle))]
     )
 
+    assert np.all(np.isfinite(cycle_analyzed["normalised_push_pattern"])), (
+        "normalised_push_pattern contains NaN or Inf"
+    )
+
     return
 
 

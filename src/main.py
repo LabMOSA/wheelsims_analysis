@@ -20,6 +20,7 @@ being executed consinuously.
 """
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 import biofeedback
@@ -58,8 +59,7 @@ def _test(arg1: str, arg2: int) -> None:
     )
 
 
-
-COMMAND_MAPPING = {
+COMMAND_MAPPING: dict[str, Callable] = {
     "test": _test,
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,

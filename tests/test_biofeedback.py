@@ -62,7 +62,7 @@ def test_with_udp_data_from_motive():
         biofeedback._runtime_state["data"] = data_temp
         biofeedback.biofeedback_update(**arg)
     results = biofeedback.kinematics_data.copy()
-    biofeedback.biofeedback_stop(arg)
+    biofeedback.biofeedback_stop()
 
     # Verify the number of detected cycles and the full time series length
     y_1 = [

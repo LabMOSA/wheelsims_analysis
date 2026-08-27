@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   
 jobs:
-  unittests:
+  tests:
     defaults:
       run:
         shell: bash -l {0}
@@ -19,8 +19,6 @@ jobs:
         
     steps:
     - uses: actions/checkout@v7
-      with:
-        submodules: recursive
     - id: install-python
       uses: actions/setup-python@v6
       with:
@@ -32,6 +30,10 @@ jobs:
         pip install -r requirements_dev.txt
     - name: Test formatting
       run: ruff format --check src
+    - name: Test code quality
+      run: ruff check --output-format=github src
+    - name: Test static typing
+      run: mypy src
     - name: Test with pytest and crash on warnings
       run: |
         export PYTHONPATH=":src"

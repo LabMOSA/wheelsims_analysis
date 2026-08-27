@@ -9,10 +9,10 @@ def send_ready() -> None:
 
 
 def test(arg1: str, arg2: int) -> None:
+    """Answer to test command (used in unit tests)."""
     sender.send(
         {
             "command": "test",
-            "args": {"arg1": arg1, "arg2": arg2},
-            "data": [1, 2, 3],
+            "data": [arg1, arg2, 1, 2, 3],
         }
     )

@@ -22,25 +22,24 @@ For run_mode == "stop", the function listed in COMMAND_MAPPING[command] stops
 being executed consinuously.
 """
 
-import json
 import os
-import socket
-import time
 from typing import Any
 
 import biofeedback
 import data_logging
-from . import control
 
-from . import Receiver, IP, GODOT_TO_PYTHON_PORT, PYTHON_TO_GODOT_PORT
+from . import GODOT_TO_PYTHON_PORT, IP, Receiver, control
 
 UDP_IP = "127.0.0.1"
 PYTHON_PORT = 4243
 GODOT_PORT = 4242
 
-class PrivateVariables():
+
+class PrivateVariables:
+    """Keep track of private variables."""
+
     is_running: bool = True
-    sock = None
+
 
 _private_vars = PrivateVariables
 _running_commands: dict[str, dict[str, Any]] = {}
@@ -53,7 +52,6 @@ def _close(args=None):
     """Close the Python app."""
     print("\nClose Python app...")
     _private_vars.is_running = False
-
 
 
 COMMAND_MAPPING = {
@@ -77,19 +75,18 @@ def start():
     - Sends an initial ready command to Godot
     - Enters the main loop to listen and execute requests
     """
-
     # Sending ping request, availables functions to Godot for debug scene
     print("Python connected to Godot...\n")
-    #time.sleep(1)
+    # time.sleep(1)
     control.send_ready()
-#    sender.send_data("ping", list(COMMAND_MAPPING.keys()))
+    #    sender.send_data("ping", list(COMMAND_MAPPING.keys()))
 
-#    time.sleep(1)
+    #    time.sleep(1)
 
     # Listening Godot requests
     while _private_vars.is_running:
         # Execute every command in the UDP buffer
-        while (command_dict := receiver.receive()):
+        while command_dict := receiver.receive():
             command = command_dict["command"]
             run_mode = command_dict["run_mode"]
             args = command_dict["args"]
@@ -108,9 +105,7 @@ def start():
                 COMMAND_MAPPING[command](**command_dict["args"])
 
             else:
-                raise ValueError(
-                    "frequency must be 'start', 'stop' or 'once'"
-                )
+                raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
         # Do not execute repeating commands after shutdown request
         if not _private_vars.is_running:
@@ -122,4 +117,3 @@ def start():
 
     # Quit
     os._exit(0)
-

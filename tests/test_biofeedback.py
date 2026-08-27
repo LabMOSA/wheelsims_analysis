@@ -60,7 +60,7 @@ def test_with_udp_data_from_motive():
         data_temp["201"] = data["201"].get_ts_before_index(i)
         data_temp["202"] = data["202"].get_ts_before_index(i)
         biofeedback._runtime_state["data"] = data_temp
-        biofeedback.biofeedback_update(arg)
+        biofeedback.biofeedback_update(**arg)
     results = biofeedback.kinematics_data.copy()
     biofeedback.biofeedback_stop(arg)
 

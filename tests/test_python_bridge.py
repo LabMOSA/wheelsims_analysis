@@ -58,8 +58,7 @@ def test_python_bridge():
         # Check that we receive something
         received_data = receiver.receive()
         assert received_data["command"] == "test"
-        assert received_data["args"] == {"arg1": "test", "arg2": 123.45}
-        assert received_data["data"] == [1, 2, 3]
+        assert received_data["data"] == ["test", 123.45, 1, 2, 3]
 
     except Exception as e:
         raise e
@@ -73,5 +72,4 @@ def test_python_bridge():
 
 
 if __name__ == "__main__":  # pragma: no cover
-
     pytest.main([__file__])

@@ -17,8 +17,7 @@ __license__ = "Apache 2.0"
 
 import json
 import socket
-from typing import Any, Self
-
+from typing import Any
 
 IP = "127.0.0.1"
 GODOT_TO_PYTHON_PORT = 4242
@@ -41,7 +40,7 @@ class Receiver:
 
     """
 
-    def __init__(self, ip: str, port: int, timeout: float) -> Self:
+    def __init__(self, ip: str, port: int, timeout: float):
         self.ip = ip
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -86,7 +85,7 @@ class Sender:
 
     """
 
-    def __init__(self, ip: str, port: int) -> Self:
+    def __init__(self, ip: str, port: int):
         self.ip = ip
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

@@ -504,7 +504,16 @@ def _stop_ot(
 
 
 def start_log(
-    arg: ArgStructure,
+    *,
+    folder: str,
+    participant: str,
+    time: str,
+    scene: str,
+    player_trajectory: bool,
+    instrumented_wheels: bool,
+    motion_capture: bool,
+    position: str,
+    rotation: str,
     session_details: FileDetails = session_details,
 ) -> None:
     """
@@ -512,27 +521,41 @@ def start_log(
 
     Parameters
     ----------
-    arg
-        Dictionary containing arguments received from Godot.
+    folder:
+        The main folder where all data is saved.
+    participant:
+        The current participant identifier.
+    time:
+        The current timestamp.
+    scene:
+        The current selected playable scene.
+    player_trajectory:
+        Whether to save the player's trajectory.
+    instrumented_wheels:
+        Whether to save the wheels.
+    motion_capture:
+        Whether to save the motion capture.
+    position:
+        The current player position in the simulator.
+    rotation:
+        The current player rotation in the simulator.
     session_details :
         Dictionary holding folder details for current session/trial.
         The default is session_details.
 
     """
     session_details["session_date"] = str(date.today())
-    session_details["participant_folder"] = _make_folder(
-        arg["folder"], arg["participant"]
-    )
+    session_details["participant_folder"] = _make_folder(folder, participant)
     session_details["session_folder"] = _make_folder(
-        arg["folder"],
-        arg["participant"],
+        folder,
+        participant,
         session=session_details["session_date"],
     )
     session_details["session"] = _get_number(
         session_details["participant_folder"]
     )
 
-    if arg["instrumented_wheels"]:
+    if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
             try:
                 wheel.ip = wheels["ip_addresses"][key]
@@ -546,7 +569,16 @@ def start_log(
 
 
 def create_trial(
-    arg: ArgStructure,
+    *,
+    folder: str,
+    participant: str,
+    time: str,
+    scene: str,
+    player_trajectory: bool,
+    instrumented_wheels: bool,
+    motion_capture: bool,
+    position: str,
+    rotation: str,
     session_writers: dict[str, FileLogger] = session_writers,
     session_details: FileDetails = session_details,
 ) -> None:
@@ -555,8 +587,24 @@ def create_trial(
 
     Parameters
     ----------
-    arg :
-        Dictionary containing arguments received from Godot.
+    folder:
+        The main folder where all data is saved.
+    participant:
+        The current participant identifier.
+    time:
+        The current timestamp.
+    scene:
+        The current selected playable scene.
+    player_trajectory:
+        Whether to save the player's trajectory.
+    instrumented_wheels:
+        Whether to save the wheels.
+    motion_capture:
+        Whether to save the motion capture.
+    position:
+        The current player position in the simulator.
+    rotation:
+        The current player rotation in the simulator.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
@@ -565,12 +613,12 @@ def create_trial(
         The default is session_details.
 
     """
-    if arg["instrumented_wheels"]:
+    if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
             wheel.start_streaming()
             print("Streaming started for wheel: ", key, " of IP ", wheel.ip)
 
-    if arg["motion_capture"]:
+    if motion_capture:
         ot.start()
         print("Streaming started for Optitrack.")
 
@@ -579,15 +627,15 @@ def create_trial(
     )
 
     session_details["trial_folder"] = _make_folder(
-        arg["folder"],
-        arg["participant"],
+        folder,
+        participant,
         session=session_details["session_date"],
         trial="T" + str(session_details["trial"]),
     )
 
-    if arg["player_trajectory"]:
+    if player_trajectory:
         filename = _make_filename(
-            arg["scene"],
+            scene,
             "trajectory",
             session_details,
         )
@@ -603,7 +651,16 @@ def create_trial(
 
 
 def save_data(
-    arg: ArgStructure,
+    *,
+    folder: str,
+    participant: str,
+    time: str,
+    scene: str,
+    player_trajectory: bool,
+    instrumented_wheels: bool,
+    motion_capture: bool,
+    position: str,
+    rotation: str,
     session_writers: dict[str, FileLogger] = session_writers,
     session_details: FileDetails = session_details,
 ) -> None:
@@ -612,8 +669,24 @@ def save_data(
 
     Parameters
     ----------
-    arg :
-        Dictionary containing arguments received from Godot.
+    folder:
+        The main folder where all data is saved.
+    participant:
+        The current participant identifier.
+    time:
+        The current timestamp.
+    scene:
+        The current selected playable scene.
+    player_trajectory:
+        Whether to save the player's trajectory.
+    instrumented_wheels:
+        Whether to save the wheels.
+    motion_capture:
+        Whether to save the motion capture.
+    position:
+        The current player position in the simulator.
+    rotation:
+        The current player rotation in the simulator.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
@@ -622,44 +695,49 @@ def save_data(
         The default is session_details.
 
     """
-    if arg["player_trajectory"]:
-        trajectory_data = _get_subset(arg, ["time", "position", "rotation"])
-
-        if (trajectory_data["position"] is not None) or (
-            trajectory_data["rotation"] is not None
-        ):
+    if player_trajectory:
+        if position or rotation:
             _save_trajectory(
-                trajectory_data,
+                {"time": time, "position": position, "rotation": rotation},
                 session_writers,
             )
 
-    if arg["instrumented_wheels"]:
+    if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
             nw = wheel.fetch(clear=True)
             for subkey, ts in nw.items():
                 _save_ts(
                     ts,
                     key + "_" + subkey,
-                    arg["scene"],
+                    scene,
                     session_writers,
                     session_details,
                 )
 
-    if arg["motion_capture"]:
+    if motion_capture:
         motion = ot.fetch(clear_buffer=True, transform_data=False)
         for ID, ts in motion.items():
             if len(ID) == 3:
                 _save_ts(
                     ts,
                     "rigidbody_" + ID,
-                    arg["scene"],
+                    scene,
                     session_writers,
                     session_details,
                 )
 
 
 def end_trial(
-    arg: ArgStructure,
+    *,
+    folder: str,
+    participant: str,
+    time: str,
+    scene: str,
+    player_trajectory: bool,
+    instrumented_wheels: bool,
+    motion_capture: bool,
+    position: str,
+    rotation: str,
     session_writers: dict[str, FileLogger] = session_writers,
     session_details: FileDetails = session_details,
 ) -> None:
@@ -668,8 +746,24 @@ def end_trial(
 
     Parameters
     ----------
-    arg :
-        Dictionary containing arguments received from Godot.
+    folder:
+        The main folder where all data is saved.
+    participant:
+        The current participant identifier.
+    time:
+        The current timestamp.
+    scene:
+        The current selected playable scene.
+    player_trajectory:
+        Whether to save the player's trajectory.
+    instrumented_wheels:
+        Whether to save the wheels.
+    motion_capture:
+        Whether to save the motion capture.
+    position:
+        The current player position in the simulator.
+    rotation:
+        The current player rotation in the simulator.
     session_writers :
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
@@ -678,15 +772,15 @@ def end_trial(
         The default is session_details.
 
     """
-    if arg["instrumented_wheels"]:
+    if instrumented_wheels:
         _stop_wheels(
-            arg["scene"],
+            scene,
             session_writers,
             session_details,
         )
 
-    if arg["motion_capture"]:
-        _stop_ot(arg["scene"], session_writers, session_details)
+    if motion_capture:
+        _stop_ot(scene, session_writers, session_details)
 
     for _key, writer in session_writers.items():
         writer.close_log()
@@ -700,7 +794,16 @@ def end_trial(
 
 
 def end_log(
-    arg: ArgStructure,
+    *,
+    folder: str,
+    participant: str,
+    time: str,
+    scene: str,
+    player_trajectory: bool,
+    instrumented_wheels: bool,
+    motion_capture: bool,
+    position: str,
+    rotation: str,
     session_details: FileDetails = session_details,
 ) -> None:
     """
@@ -708,8 +811,24 @@ def end_log(
 
     Parameters
     ----------
-    arg :
-        Dictionary containing arguments received from Godot.
+    folder:
+        The main folder where all data is saved.
+    participant:
+        The current participant identifier.
+    time:
+        The current timestamp.
+    scene:
+        The current selected playable scene.
+    player_trajectory:
+        Whether to save the player's trajectory.
+    instrumented_wheels:
+        Whether to save the wheels.
+    motion_capture:
+        Whether to save the motion capture.
+    position:
+        The current player position in the simulator.
+    rotation:
+        The current player rotation in the simulator.
     session_details :
         Dictionary holding folder details for current session/trial.
         The default is session_details.

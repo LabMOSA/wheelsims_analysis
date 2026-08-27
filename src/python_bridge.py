@@ -1,5 +1,5 @@
 """
-Python bridge package.
+Python bridge module.
 
 Enables asynchronous, bidirectional UDP communication with Godot to:
 - Receive and process incoming JSON commands

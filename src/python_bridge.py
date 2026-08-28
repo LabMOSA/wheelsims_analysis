@@ -20,8 +20,8 @@ import socket
 from typing import Any
 
 IP = "127.0.0.1"
-GODOT_TO_PYTHON_PORT = 4242
-PYTHON_TO_GODOT_PORT = 4343
+GODOT_TO_PYTHON_PORT = 4243
+PYTHON_TO_GODOT_PORT = 4242
 DATA_SIZE = 1024  # bytes
 
 
@@ -101,8 +101,6 @@ class Sender:
         ----------
         command
             Name of the function that sends the data
-        args
-            Arguments to the function that sends the data
         data
             Return value of the function
 

@@ -63,7 +63,7 @@ def test_start_log():
     """
     session_details: dict[str, data_logging.FileDetails] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
 
     assert session_details["session_date"] == str(date.today()), (
         f"TEST start_trial: Session date {session_details['session_date']} is incorrect."
@@ -95,9 +95,9 @@ def test_create_trial():
     session_details: dict[str, data_logging.FileDetails] = {}
     session_writers: dict[str, data_logging.FileLogger] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
     data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     assert isinstance(session_details["trial"], int), (
@@ -122,7 +122,7 @@ def test_create_trial():
     writers = session_writers.copy()
 
     data_logging.end_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
     data = pd.read_csv(
         os.path.join(
@@ -154,15 +154,15 @@ def test_end_trial():
     session_details: dict[str, data_logging.FileDetails] = {}
     session_writers: dict[str, data_logging.FileLogger] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
     data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     writers = session_writers.copy()
 
     data_logging.end_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     for key in session_writers.keys():
@@ -196,17 +196,17 @@ def test_end_log():
     session_details: dict[str, data_logging.FileDetails] = {}
     session_writers: dict[str, data_logging.FileLogger] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
     data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     writers = session_writers.copy()
 
     data_logging.end_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
-    data_logging.end_log(arg, session_details=session_details)
+    data_logging.end_log(**arg, session_details=session_details)
 
     for key in session_writers.keys():
         csv_filename = writers[key]["filename"].split(".txt")[0] + ".csv"
@@ -231,18 +231,18 @@ def test_save_data():
     session_details: dict[str, data_logging.FileDetails] = {}
     session_writers: dict[str, data_logging.FileLogger] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
     data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     data_logging.save_data(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
     writers = session_writers.copy()
 
     data_logging.end_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
     data = pd.read_csv(
         os.path.join(
@@ -284,9 +284,9 @@ def test_save_ts():
     session_details: dict[str, data_logging.FileDetails] = {}
     session_writers: dict[str, data_logging.FileLogger] = {}
 
-    data_logging.start_log(arg, session_details=session_details)
+    data_logging.start_log(**arg, session_details=session_details)
     data_logging.create_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     samples = [wheels, motion]
@@ -320,7 +320,7 @@ def test_save_ts():
             ), f"TEST _save_ts: File {filename} is missing."
 
     data_logging.end_trial(
-        arg, session_details=session_details, session_writers=session_writers
+        **arg, session_details=session_details, session_writers=session_writers
     )
 
     for sample in samples:

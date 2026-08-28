@@ -53,10 +53,10 @@ class Arg(TypedDict):
         Diameter of the wheelchair wheels in meters.
     """
 
-    coordinates_left_wheel_center: list[float]
-    coordinates_right_wheel_center: list[float]
-    coordinates_left_hand: list[float]
-    coordinates_right_hand: list[float]
+    coordinates_left_wheel_center: tuple[float, float, float]
+    coordinates_right_wheel_center: tuple[float, float, float]
+    coordinates_left_hand: tuple[float, float, float]
+    coordinates_right_hand: tuple[float, float, float]
     wheel_diameter: float
 
 
@@ -231,7 +231,7 @@ kinematics_data: KinematicsData = {
 
 
 # %% Public functions
-def biofeedback_stop(arg: Arg) -> None:
+def biofeedback_stop() -> None:
     """
     Clear all data.
 
@@ -292,7 +292,13 @@ def biofeedback_stop(arg: Arg) -> None:
     plt.show()
 
 
-def biofeedback_update(arg: Arg) -> None:
+def biofeedback_update(
+    coordinates_left_wheel_center: tuple[float, float, float],
+    coordinates_right_wheel_center: tuple[float, float, float],
+    coordinates_left_hand: tuple[float, float, float],
+    coordinates_right_hand: tuple[float, float, float],
+    wheel_diameter: float,
+) -> None:
     """
     Execute an update iteration for the biofeedback (live and offline modes).
 
@@ -300,7 +306,31 @@ def biofeedback_update(arg: Arg) -> None:
     fetches new tracking frames in 'start' mode, or processes pre-loaded local
     data in 'offline' mode. It extracts and filters kinematics, detects
     propulsion cycles, logs progress, and streams computed metrics to Godot.
+
+    Parameters
+    ----------
+    coordinates_left_wheel_center :
+        3D calibration coordinates (X, Y, Z) for the left wheel center.
+    coordinates_right_wheel_center :
+        3D calibration coordinates (X, Y, Z) for the right wheel center.
+    coordinates_left_hand :
+        Initial 3D coordinates (X, Y, Z) of the marker on the left hand.
+    coordinates_right_hand :
+        Initial 3D coordinates (X, Y, Z) of the marker on the right hand.
+    wheel_diameter :
+        Diameter of the wheelchair wheels in meters.
+
     """
+    coordinates = Arg(
+        {
+            "coordinates_left_wheel_center": coordinates_left_wheel_center,
+            "coordinates_right_wheel_center": coordinates_right_wheel_center,
+            "coordinates_left_hand": coordinates_left_hand,
+            "coordinates_right_hand": coordinates_right_hand,
+            "wheel_diameter": wheel_diameter,
+        }
+    )
+
     if _runtime_state["run_mode"] == "stop":
         ot.start()
         time.sleep(1)
@@ -319,7 +349,7 @@ def biofeedback_update(arg: Arg) -> None:
         _execute_analysis_pipeline(
             _runtime_state,
             kinematics_data,
-            arg,
+            coordinates,
             LIMIT_DURATION_CURRENT_WINDOW,
         )
 
@@ -330,7 +360,7 @@ def biofeedback_update(arg: Arg) -> None:
         _execute_analysis_pipeline(
             _runtime_state,
             kinematics_data,
-            arg,
+            coordinates,
             LIMIT_DURATION_CURRENT_WINDOW,
         )
 
@@ -555,7 +585,7 @@ def _send_data_godot(
                 }
             }
 
-            sender.send_data("biofeedback_update", data)
+            sender.send({"command": "biofeedback_update", "data": data})
 
             new_cycle_send[side] += 1
 
@@ -833,24 +863,24 @@ if __name__ == "__main__":
     """
 
     arg: Arg = {
-        "coordinates_left_wheel_center": [
+        "coordinates_left_wheel_center": (
             -0.150,
             0.300,
             -0.750,
-        ],
-        "coordinates_right_wheel_center": [
+        ),
+        "coordinates_right_wheel_center": (
             -0.145,
             0.300,
             -0.200,
-        ],
-        "coordinates_left_hand": [-0.145, 0.050, 0.020],
-        "coordinates_right_hand": [0.020, -0.160, 0.000],
+        ),
+        "coordinates_left_hand": (-0.145, 0.050, 0.020),
+        "coordinates_right_hand": (0.020, -0.160, 0.000),
         "wheel_diameter": 0.54,
     }
 
     try:
         while True:
-            biofeedback_update(arg)
+            biofeedback_update(**arg)
     except KeyboardInterrupt:
         print("Biofeedback closed")
-        biofeedback_stop(arg)
+        biofeedback_stop()

@@ -834,6 +834,18 @@ def end_log(
         The default is session_details.
 
     """
+    if len(session_writers) > 0:
+        end_trial(
+            folder=folder,
+            participant=participant,
+            time=time,
+            scene=scene,
+            player_trajectory=player_trajectory,
+            instrumented_wheels=instrumented_wheels,
+            motion_capture=motion_capture,
+            position=position,
+            rotation=rotation,
+        )
     for i in range(1, session_details["trial"] + 1):
         trial_folder = os.path.join(
             session_details["session_folder"], "T" + str(i)

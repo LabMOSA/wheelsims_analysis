@@ -78,7 +78,7 @@ class FileDetails:
     def __init__(
         self,
         participant_folder: str = "",
-        session: int | None = None,
+        session: int = 0,
         session_date: str = "",
         session_folder: str = "",
     ):
@@ -87,68 +87,8 @@ class FileDetails:
         self.session = session
         self.session_date = session_date
         self.session_folder = session_folder
-        self.trial = None
+        self.trial = 0
         self.trial_folder = ""
-
-    @property
-    def participant_folder(self):
-        """Getter for participant_folder property."""
-        return self._participant_folder
-
-    @participant_folder.setter
-    def participant_folder(self, value):
-        """Setter for participant_folder property."""
-        self._participant_folder = value
-
-    @property
-    def session(self):
-        """Getter for session property."""
-        return self._session
-
-    @session.setter
-    def session(self, value):
-        """Setter for session property."""
-        self._session = value
-
-    @property
-    def session_date(self):
-        """Getter for session_date property."""
-        return self._session_date
-
-    @session_date.setter
-    def session_date(self, value):
-        """Setter for session_date property."""
-        self._session_date = value
-
-    @property
-    def session_folder(self):
-        """Getter for session_folder property."""
-        return self._session_folder
-
-    @session_folder.setter
-    def session_folder(self, value):
-        """Setter for session_folder property."""
-        self._session_folder = value
-
-    @property
-    def trial(self):
-        """Getter for trial property."""
-        return self._trial
-
-    @trial.setter
-    def trial(self, value):
-        """Setter for trial property."""
-        self._trial = value
-
-    @property
-    def trial_folder(self):
-        """Getter for trial_folder property."""
-        return self._trial_folder
-
-    @trial_folder.setter
-    def trial_folder(self, value):
-        """Setter for trial_folder property."""
-        self._trial_folder = value
 
 
 session_details = FileDetails()

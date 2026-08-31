@@ -96,16 +96,14 @@ class FileDetails:
         session: int | None = None,
         session_date: str = "",
         session_folder: str = "",
-        trial: int | None = None,
-        trial_folder: str = "",
     ):
         """Initialize FileDetails object."""
         self.participant_folder = participant_folder
         self.session = session
         self.session_date = session_date
         self.session_folder = session_folder
-        self.trial = trial
-        self.trial_folder = trial_folder
+        self.trial = None
+        self.trial_folder = ""
 
     @property
     def participant_folder(self):

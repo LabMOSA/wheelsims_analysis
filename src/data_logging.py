@@ -41,10 +41,6 @@ class FileLogger:
     def __init__(self, filename: str):
         """Initialize FileLogger object."""
         self.filename = filename
-        self.file = None
-
-    def open_log(self) -> None:
-        """Open file and create writer object."""
         self.file = open(
             self.filename, "w", encoding="utf-8", buffering=1024 * 1024
         )
@@ -307,7 +303,6 @@ def _make_file(
 
     """
     session_writers[filetype] = FileLogger(filename)
-    session_writers[filetype].open_log()
     session_writers[filetype].log_row(np.array(header))
 
 

@@ -38,7 +38,7 @@ wheels = {
 class FileLogger:
     """FileLogger class holds an open file of filename."""
 
-    def __init__(self, filename):
+    def __init__(self, filename: str):
         """Initialize FileLogger object."""
         self.filename = filename
         self.file = None
@@ -87,30 +87,85 @@ class FileLogger:
 session_writers: dict[str, FileLogger] = {}
 
 
-class FileDetails(TypedDict, total=False):
-    """
-    Structure of the dictionary containing details about current session/trial.
+class FileDetails:
+    """FileDetails class holds information about current session/trial."""
 
-    participant_folder:
-        The current participant folder where data is saved for all sessions.
-    session:
-        The current session number.
-    session_date:
-        The current session date.
-    session_folder:
-        The current participant folder where data is saved for this session.
-    trial:
-        The current trial number.
-    trial_folder:
-        The current participant folder where data is saved for this trial.
-    """
+    def __init__(
+        self,
+        participant_folder: str = "",
+        session: str = "",
+        session_date: str = "",
+        session_folder: str = "",
+        trial: str = "",
+        trial_folder: str = "",
+    ):
+        """Initialize FileDetails object."""
+        self.participant_folder = participant_folder
+        self.session = session
+        self.session_date = session_date
+        self.session_folder = session_folder
+        self.trial = trial
+        self.trial_folder = trial_folder
 
-    participant_folder: str
-    session: int
-    session_date: str
-    session_folder: str
-    trial: int
-    trial_folder: str
+    @property
+    def participant_folder(self):
+        """Getter for participant_folder property."""
+        return self._participant_folder
+
+    @participant_folder.setter
+    def participant_folder(self, value):
+        """Setter for participant_folder property."""
+        self._participant_folder = value
+
+    @property
+    def session(self):
+        """Getter for session property."""
+        return self._session
+
+    @session.setter
+    def session(self, value):
+        """Setter for session property."""
+        self._session = value
+
+    @property
+    def session_date(self):
+        """Getter for session_date property."""
+        return self._session_date
+
+    @session_date.setter
+    def session_date(self, value):
+        """Setter for session_date property."""
+        self._session_date = value
+
+    @property
+    def session_folder(self):
+        """Getter for session_folder property."""
+        return self._session_folder
+
+    @session_folder.setter
+    def session_folder(self, value):
+        """Setter for session_folder property."""
+        self._session_folder = value
+
+    @property
+    def trial(self):
+        """Getter for trial property."""
+        return self._trial
+
+    @trial.setter
+    def trial(self, value):
+        """Setter for trial property."""
+        self._trial = value
+
+    @property
+    def trial_folder(self):
+        """Getter for trial_folder property."""
+        return self._trial_folder
+
+    @trial_folder.setter
+    def trial_folder(self, value):
+        """Setter for trial_folder property."""
+        self._trial_folder = value
 
 
 session_details = FileDetails()
@@ -215,12 +270,12 @@ def _make_filename(
     """
     file = (
         "S"
-        + str(session_details["session"])
+        + session_details["session"]
         + "_"
-        + str(session_details["session_date"])
+        + session_details["session_date"]
         + "_"
         + "T"
-        + str(session_details["trial"])
+        + session_details["trial"]
         + "_"
         + scene
         + "_"
@@ -355,7 +410,7 @@ def _save_ts(
             header = [["time"] + list(ts.to_dataframe().columns)]
             filename = _make_filename(scene, filetype, session_details)
             _make_file(
-                os.path.join(str(session_details["trial_folder"]), filename),
+                os.path.join(session_details["trial_folder"], filename),
                 header,
                 filetype,
                 session_writers,
@@ -588,7 +643,7 @@ def create_trial(
         folder,
         participant,
         session=session_details["session_date"],
-        trial="T" + str(session_details["trial"]),
+        trial="T" + session_details["trial"],
     )
 
     if player_trajectory:

@@ -90,63 +90,27 @@ class FileDetails:
         self.trial = None
         self.trial_folder = ""
 
-    @property
-    def participant_folder(self):
-        """Getter for participant_folder property."""
-        return self._participant_folder
-
-    @participant_folder.setter
-    def participant_folder(self, value):
+    def set_participant_folder(self, value):
         """Setter for participant_folder property."""
         self._participant_folder = value
 
-    @property
-    def session(self):
-        """Getter for session property."""
-        return self._session
-
-    @session.setter
-    def session(self, value):
+    def set_session(self, value):
         """Setter for session property."""
         self._session = value
 
-    @property
-    def session_date(self):
-        """Getter for session_date property."""
-        return self._session_date
-
-    @session_date.setter
-    def session_date(self, value):
+    def set_session_date(self, value):
         """Setter for session_date property."""
         self._session_date = value
 
-    @property
-    def session_folder(self):
-        """Getter for session_folder property."""
-        return self._session_folder
-
-    @session_folder.setter
-    def session_folder(self, value):
+    def set_session_folder(self, value):
         """Setter for session_folder property."""
         self._session_folder = value
 
-    @property
-    def trial(self):
-        """Getter for trial property."""
-        return self._trial
-
-    @trial.setter
-    def trial(self, value):
+    def set_trial(self, value):
         """Setter for trial property."""
         self._trial = value
 
-    @property
-    def trial_folder(self):
-        """Getter for trial_folder property."""
-        return self._trial_folder
-
-    @trial_folder.setter
-    def trial_folder(self, value):
+    def set_trial_folder(self, value):
         """Setter for trial_folder property."""
         self._trial_folder = value
 
@@ -525,14 +489,18 @@ def start_log(
         The default is session_details.
 
     """
-    session_details.session_date = str(date.today())
-    session_details.participant_folder = _make_folder(folder, participant)
-    session_details.session_folder = _make_folder(
-        folder,
-        participant,
-        session=session_details.session_date,
+    session_details.set_session_date(str(date.today()))
+    session_details.set_participant_folder(_make_folder(folder, participant))
+    session_details.set_session_folder(
+        _make_folder(
+            folder,
+            participant,
+            session=session_details.session_date,
+        )
     )
-    session_details.session = _get_number(session_details.participant_folder)
+    session_details.set_session(
+        _get_number(session_details.participant_folder)
+    )
 
     if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
@@ -615,13 +583,15 @@ def create_trial(
         ot.start()
         print("Streaming started for Optitrack.")
 
-    session_details.trial = _get_number(session_details.session_folder) + 1
+    session_details.set_trial(_get_number(session_details.session_folder) + 1)
 
-    session_details.trial_folder = _make_folder(
-        folder,
-        participant,
-        session=session_details.session_date,
-        trial="T" + str(session_details.trial),
+    session_details.set_trial_folder(
+        _make_folder(
+            folder,
+            participant,
+            session=session_details.session_date,
+            trial="T" + str(session_details.trial),
+        )
     )
 
     if player_trajectory:

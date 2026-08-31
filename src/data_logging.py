@@ -9,7 +9,6 @@ well as information collected through the instrumented wheels.
 import glob
 import os
 from datetime import date
-from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
@@ -39,13 +38,8 @@ class FileLogger:
 
     def __init__(self, filename):
         """Initialize FileLogger object."""
-        self.filename = filename
-        self.file = None
-
-    def open_log(self) -> None:
-        """Open file and create writer object."""
         self.file = open(
-            self.filename, "w", encoding="utf-8", buffering=1024 * 1024
+            filename, "w", encoding="utf-8", buffering=1024 * 1024
         )
 
     def log_row(self, data_lines: np.ndarray) -> None:
@@ -67,7 +61,7 @@ class FileLogger:
                 self.file.write("\t".join(map(str, row)) + "\n")
 
         else:
-            raise ValueError(f"File {self.filename} is closed.")
+            raise ValueError(f"File {self.file.name('\\')[-1]} is closed.")
 
     def close_log(self) -> None:
         """Close an opened file."""
@@ -78,69 +72,86 @@ class FileLogger:
 session_writers: dict[str, FileLogger] = {}
 
 
-class FileDetails(TypedDict, total=False):
-    """
-    Structure of the dictionary containing details about current session/trial.
+class FileDetails:
+    """FileDetails class holds information about current session/trial."""
 
-    participant_folder:
-        The current participant folder where data is saved for all sessions.
-    session:
-        The current session number.
-    session_date:
-        The current session date.
-    session_folder:
-        The current participant folder where data is saved for this session.
-    trial:
-        The current trial number.
-    trial_folder:
-        The current participant folder where data is saved for this trial.
-    """
+    def __init__(
+        self,
+        participant_folder: str = "",
+        session: int | None = None,
+        session_date: str = "",
+        session_folder: str = "",
+    ):
+        """Initialize FileDetails object."""
+        self.participant_folder = participant_folder
+        self.session = session
+        self.session_date = session_date
+        self.session_folder = session_folder
+        self.trial = None
+        self.trial_folder = ""
 
-    participant_folder: str
-    session: int
-    session_date: str
-    session_folder: str
-    trial: int
-    trial_folder: str
+    @property
+    def participant_folder(self):
+        """Getter for participant_folder property."""
+        return self._participant_folder
+
+    @participant_folder.setter
+    def participant_folder(self, value):
+        """Setter for participant_folder property."""
+        self._participant_folder = value
+
+    @property
+    def session(self):
+        """Getter for session property."""
+        return self._session
+
+    @session.setter
+    def session(self, value):
+        """Setter for session property."""
+        self._session = value
+
+    @property
+    def session_date(self):
+        """Getter for session_date property."""
+        return self._session_date
+
+    @session_date.setter
+    def session_date(self, value):
+        """Setter for session_date property."""
+        self._session_date = value
+
+    @property
+    def session_folder(self):
+        """Getter for session_folder property."""
+        return self._session_folder
+
+    @session_folder.setter
+    def session_folder(self, value):
+        """Setter for session_folder property."""
+        self._session_folder = value
+
+    @property
+    def trial(self):
+        """Getter for trial property."""
+        return self._trial
+
+    @trial.setter
+    def trial(self, value):
+        """Setter for trial property."""
+        self._trial = value
+
+    @property
+    def trial_folder(self):
+        """Getter for trial_folder property."""
+        return self._trial_folder
+
+    @trial_folder.setter
+    def trial_folder(self, value):
+        """Setter for trial_folder property."""
+        self._trial_folder = value
 
 
 session_details = FileDetails()
-
-
-class ArgStructure(TypedDict):
-    """
-    Structure of the dictionary containing arguments received from Godot.
-
-    folder:
-        The main folder where all data is saved.
-    participant:
-        The current participant identifier.
-    time:
-        The current timestamp.
-    scene:
-        The current selected playable scene.
-    player_trajectory:
-        Whether to save the player's trajectory.
-    instrumented_wheels:
-        Whether to save the wheels.
-    motion_capture:
-        Whether to save the motion capture.
-    position:
-        The current player position in the simulator.
-    rotation:
-        The current player rotation in the simulator.
-
-    """
-
-    folder: str
-    participant: str
-    time: str
-    scene: str
-    player_trajectory: bool
-    instrumented_wheels: bool
-    motion_capture: bool
-    position: str
-    rotation: str
 
 
 # %% Folder contents
@@ -231,7 +242,7 @@ def _make_filename(
             Optitrack: RigidBody + ID.
             NextWheel: Analog, IMU, Encoder, Power.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     Returns
@@ -242,17 +253,17 @@ def _make_filename(
     """
     file = (
         "S"
-        + str(session_details["session"])
+        + str(session_details.session)
         + "_"
-        + str(session_details["session_date"])
+        + session_details.session_date
         + "_"
         + "T"
-        + str(session_details["trial"])
+        + str(session_details.trial)
         + "_"
         + scene
         + "_"
         + data_type
-        + ".csv"
+        + ".txt"
     )
 
     return file
@@ -281,7 +292,6 @@ def _make_file(
 
     """
     session_writers[filetype] = FileLogger(filename)
-    session_writers[filetype].open_log()
     session_writers[filetype].log_row(np.array(header))
 
 
@@ -319,28 +329,6 @@ def _make_header(
         ]
     ]
     return header
-
-
-def _get_subset(arg: ArgStructure, keys: list[str]) -> dict[str, Any]:
-    """
-    Cast the TypedDict ArgStructure into generic dictionary to extract data.
-
-    Parameters
-    ----------
-    arg
-        Dictionary containing arguments received from Godot.
-    keys
-        List of keys to be extracted
-
-    Returns
-    -------
-    dict
-        A generic dictionary containing the extracted data.
-
-    """
-    generic_arg = cast(dict[str, Any], arg)
-    subset = {k: generic_arg[k] for k in keys if k in generic_arg}
-    return subset
 
 
 def _save_trajectory(
@@ -395,7 +383,7 @@ def _save_ts(
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     """
@@ -404,7 +392,7 @@ def _save_ts(
             header = [["time"] + list(ts.to_dataframe().columns)]
             filename = _make_filename(scene, filetype, session_details)
             _make_file(
-                os.path.join(str(session_details["trial_folder"]), filename),
+                os.path.join(str(session_details.trial_folder), filename),
                 header,
                 filetype,
                 session_writers,
@@ -446,7 +434,7 @@ def _stop_wheels(
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     """
@@ -533,20 +521,18 @@ def start_log(
     rotation:
         The current player rotation in the simulator.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     """
-    session_details["session_date"] = str(date.today())
-    session_details["participant_folder"] = _make_folder(folder, participant)
-    session_details["session_folder"] = _make_folder(
+    session_details.session_date = str(date.today())
+    session_details.participant_folder = _make_folder(folder, participant)
+    session_details.session_folder = _make_folder(
         folder,
         participant,
-        session=session_details["session_date"],
+        session=session_details.session_date,
     )
-    session_details["session"] = _get_number(
-        session_details["participant_folder"]
-    )
+    session_details.session = _get_number(session_details.participant_folder)
 
     if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
@@ -602,11 +588,11 @@ def create_trial(
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     """
-    if session_details["session_date"] is None:
+    if session_details.session_date is None:
         start_log(
             folder=folder,
             participant=participant,
@@ -629,15 +615,13 @@ def create_trial(
         ot.start()
         print("Streaming started for Optitrack.")
 
-    session_details["trial"] = (
-        _get_number(session_details["session_folder"]) + 1
-    )
+    session_details.trial = _get_number(session_details.session_folder) + 1
 
-    session_details["trial_folder"] = _make_folder(
+    session_details.trial_folder = _make_folder(
         folder,
         participant,
-        session=session_details["session_date"],
-        trial="T" + str(session_details["trial"]),
+        session=session_details.session_date,
+        trial="T" + str(session_details.trial),
     )
 
     if player_trajectory:
@@ -649,7 +633,7 @@ def create_trial(
 
         header = _make_header(["position", "rotation"], [4, 4])
         _make_file(
-            os.path.join(session_details["trial_folder"], filename),
+            os.path.join(session_details.trial_folder, filename),
             header,
             "player_trajectory",
             session_writers,
@@ -698,7 +682,7 @@ def save_data(
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
 
     """
@@ -789,9 +773,8 @@ def end_trial(
         Dictionary holding all the FileLogger objects for this session.
         The default is session_writers.
     session_details :
-        Dictionary holding folder details for current session/trial.
+        FileDetails() object holding details for current session/trial.
         The default is session_details.
-
     """
     if instrumented_wheels:
         _stop_wheels(
@@ -810,7 +793,7 @@ def end_trial(
 
     print(
         "Logging is done for current trial: ",
-        session_details["trial_folder"],
+        session_details.trial_folder,
     )
 
 
@@ -851,7 +834,12 @@ def end_log(
         The current player position in the simulator.
     rotation:
         The current player rotation in the simulator.
-
+    session_writers :
+        Dictionary holding all the FileLogger objects for this session.
+        The default is session_writers.
+    session_details :
+        FileDetails() object holding details for current session/trial.
+        The default is session_details.
     """
     if len(session_writers) > 0:
         end_trial(

@@ -252,7 +252,7 @@ def _make_filename(
         + scene
         + "_"
         + data_type
-        + ".txt"
+        + ".csv"
     )
 
     return file

@@ -622,11 +622,8 @@ def create_trial(
 
     if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
-            if wheel.ip != "":
-                wheel.start_streaming()
-                print(
-                    "Streaming started for wheel: ", key, " of IP ", wheel.ip
-                )
+            wheel.start_streaming()
+            print("Streaming started for wheel: ", key, " of IP ", wheel.ip)
 
     if motion_capture:
         ot.start()

@@ -10,7 +10,6 @@ import glob
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
@@ -115,42 +114,6 @@ class FileDetails(TypedDict, total=False):
 
 
 session_details = FileDetails()
-
-
-class ArgStructure(TypedDict):
-    """
-    Structure of the dictionary containing arguments received from Godot.
-
-    folder:
-        The main folder where all data is saved.
-    participant:
-        The current participant identifier.
-    time:
-        The current timestamp.
-    scene:
-        The current selected playable scene.
-    player_trajectory:
-        Whether to save the player's trajectory.
-    instrumented_wheels:
-        Whether to save the wheels.
-    motion_capture:
-        Whether to save the motion capture.
-    position:
-        The current player position in the simulator.
-    rotation:
-        The current player rotation in the simulator.
-
-    """
-
-    folder: str
-    participant: str
-    time: str
-    scene: str
-    player_trajectory: bool
-    instrumented_wheels: bool
-    motion_capture: bool
-    position: str
-    rotation: str
 
 
 # %% Folder contents
@@ -329,28 +292,6 @@ def _make_header(
         ]
     ]
     return header
-
-
-def _get_subset(arg: ArgStructure, keys: list[str]) -> dict[str, Any]:
-    """
-    Cast the TypedDict ArgStructure into generic dictionary to extract data.
-
-    Parameters
-    ----------
-    arg
-        Dictionary containing arguments received from Godot.
-    keys
-        List of keys to be extracted
-
-    Returns
-    -------
-    dict
-        A generic dictionary containing the extracted data.
-
-    """
-    generic_arg = cast(dict[str, Any], arg)
-    subset = {k: generic_arg[k] for k in keys if k in generic_arg}
-    return subset
 
 
 def _save_trajectory(

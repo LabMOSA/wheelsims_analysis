@@ -93,10 +93,10 @@ class FileDetails:
     def __init__(
         self,
         participant_folder: str = "",
-        session: str = "",
+        session: int | None = None,
         session_date: str = "",
         session_folder: str = "",
-        trial: str = "",
+        trial: int | None = None,
         trial_folder: str = "",
     ):
         """Initialize FileDetails object."""
@@ -270,12 +270,12 @@ def _make_filename(
     """
     file = (
         "S"
-        + session_details["session"]
+        + str(session_details.session)
         + "_"
-        + session_details["session_date"]
+        + session_details.session_date
         + "_"
         + "T"
-        + session_details["trial"]
+        + str(session_details.trial)
         + "_"
         + scene
         + "_"
@@ -410,7 +410,7 @@ def _save_ts(
             header = [["time"] + list(ts.to_dataframe().columns)]
             filename = _make_filename(scene, filetype, session_details)
             _make_file(
-                os.path.join(session_details["trial_folder"], filename),
+                os.path.join(session_details.trial_folder, filename),
                 header,
                 filetype,
                 session_writers,
@@ -543,16 +543,14 @@ def start_log(
         The default is session_details.
 
     """
-    session_details["session_date"] = str(date.today())
-    session_details["participant_folder"] = _make_folder(folder, participant)
-    session_details["session_folder"] = _make_folder(
+    session_details.session_date = str(date.today())
+    session_details.participant_folder = _make_folder(folder, participant)
+    session_details.session_folder = _make_folder(
         folder,
         participant,
-        session=session_details["session_date"],
+        session=session_details.session_date,
     )
-    session_details["session"] = _get_number(
-        session_details["participant_folder"]
-    )
+    session_details.session = _get_number(session_details.participant_folder)
 
     if instrumented_wheels:
         for key, wheel in wheels["wheels"].items():
@@ -612,7 +610,7 @@ def create_trial(
         The default is session_details.
 
     """
-    if session_details["session_date"] is None:
+    if session_details.session_date is None:
         start_log(
             folder=folder,
             participant=participant,
@@ -635,15 +633,13 @@ def create_trial(
         ot.start()
         print("Streaming started for Optitrack.")
 
-    session_details["trial"] = (
-        _get_number(session_details["session_folder"]) + 1
-    )
+    session_details.trial = _get_number(session_details.session_folder) + 1
 
-    session_details["trial_folder"] = _make_folder(
+    session_details.trial_folder = _make_folder(
         folder,
         participant,
-        session=session_details["session_date"],
-        trial="T" + session_details["trial"],
+        session=session_details.session_date,
+        trial="T" + str(session_details.trial),
     )
 
     if player_trajectory:
@@ -655,7 +651,7 @@ def create_trial(
 
         header = _make_header(["position", "rotation"], [4, 4])
         _make_file(
-            os.path.join(session_details["trial_folder"], filename),
+            os.path.join(session_details.trial_folder, filename),
             header,
             "player_trajectory",
             session_writers,
@@ -816,7 +812,7 @@ def end_trial(
 
     print(
         "Logging is done for current trial: ",
-        session_details["trial_folder"],
+        session_details.trial_folder,
     )
 
 
@@ -875,9 +871,9 @@ def end_log(
             rotation=rotation,
         )
 
-    for i in range(1, session_details["trial"] + 1):
+    for i in range(1, session_details.trial + 1):
         trial_folder = os.path.join(
-            session_details["session_folder"], "T" + str(i)
+            session_details.session_folder, "T" + str(i)
         )
         files = list(Path(trial_folder).glob("*.txt"))
         for file in files:

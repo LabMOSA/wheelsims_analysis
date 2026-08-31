@@ -61,23 +61,23 @@ def test_start_log():
     Asserts folders were created for the test participant and today's session.
 
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
 
     data_logging.start_log(**arg, session_details=session_details)
 
-    assert session_details["session_date"] == str(date.today()), (
-        f"TEST start_trial: Session date {session_details['session_date']} is incorrect."
+    assert session_details.session_date == str(date.today()), (
+        f"TEST start_trial: Session date {session_details.session_date} is incorrect."
     )
 
-    assert isinstance(session_details["session"], int), (
-        f"TEST start_log: Session number {session_details['session']} must be an integer."
+    assert isinstance(session_details.session, int), (
+        f"TEST start_log: Session number {session_details.session} must be an integer."
     )
 
-    assert os.path.isdir(session_details["participant_folder"]), (
+    assert os.path.isdir(session_details.participant_folder), (
         f"TEST start_trial: Folder {arg['participant']} was not created."
     )
 
-    assert os.path.isdir(session_details["session_folder"]), (
+    assert os.path.isdir(session_details.session_folder), (
         f"TEST start_trial: Session folder {str(date.today())} was not created."
     )
 
@@ -92,7 +92,7 @@ def test_create_trial():
     Asserts that a new trial was initiated, and that the appropriate CSV file
     was created (to save the player trajectory).
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
     session_writers: dict[str, data_logging.FileLogger] = {}
 
     data_logging.start_log(**arg, session_details=session_details)
@@ -100,21 +100,21 @@ def test_create_trial():
         **arg, session_details=session_details, session_writers=session_writers
     )
 
-    assert isinstance(session_details["trial"], int), (
-        f"TEST create_trial: Trial number {session_details['trial']} must be an integer."
+    assert isinstance(session_details.trial, int), (
+        f"TEST create_trial: Trial number {session_details.trial} must be an integer."
     )
 
-    assert session_details["trial"] > 0, (
-        f"TEST create_trial: Trial number {session_details['trial']} must be positive."
+    assert session_details.trial > 0, (
+        f"TEST create_trial: Trial number {session_details.trial} must be positive."
     )
 
-    assert os.path.isdir(session_details["trial_folder"]), (
-        f"TEST create_trial: Trial folder {session_details['trial_folder']} was not created."
+    assert os.path.isdir(session_details.trial_folder), (
+        f"TEST create_trial: Trial folder {session_details.trial_folder} was not created."
     )
 
     assert os.path.isfile(
         os.path.join(
-            session_details["trial_folder"],
+            session_details.trial_folder,
             session_writers["player_trajectory"].filename,
         )
     ), f"TEST create_trial: File {trajectory['file']} does not exist."
@@ -126,7 +126,7 @@ def test_create_trial():
     )
     data = pd.read_csv(
         os.path.join(
-            session_details["trial_folder"],
+            session_details.trial_folder,
             writers["player_trajectory"].filename,
         ),
         sep="\t",
@@ -151,7 +151,7 @@ def test_end_trial():
 
     Assert files are saved and readable, and writers were erased.
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
     session_writers: dict[str, data_logging.FileLogger] = {}
 
     data_logging.start_log(**arg, session_details=session_details)
@@ -168,13 +168,13 @@ def test_end_trial():
     for key in session_writers.keys():
         assert os.path.isfile(
             os.path.join(
-                session_details["trial_folder"], writers[key]["filename"]
+                session_details.trial_folder, writers[key]["filename"]
             )
         ), f"TEST end_trial: File {key} does not exist."
 
         file_writer = data_logging.FileLogger(
             os.path.join(
-                session_details["trial_folder"], writers[key]["filename"]
+                session_details.trial_folder, writers[key]["filename"]
             )
         )
         assert file_writer.closed, f"File {key} is not closed."
@@ -193,7 +193,7 @@ def test_end_log():
 
     Assert .txt files were converted to .csv.
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
     session_writers: dict[str, data_logging.FileLogger] = {}
 
     data_logging.start_log(**arg, session_details=session_details)
@@ -211,7 +211,7 @@ def test_end_log():
     for key in session_writers.keys():
         csv_filename = writers[key]["filename"].split(".txt")[0] + ".csv"
         assert os.path.isfile(
-            os.path.join(session_details["trial_folder"], csv_filename)
+            os.path.join(session_details.trial_folder, csv_filename)
         ), f"TEST end_log: File {key} not converted to csv."
 
     if os.path.exists(os.path.join(arg["folder"], arg["participant"])):
@@ -228,7 +228,7 @@ def test_save_data():
     Assert that sample data for the player trajectory is properly saved, with
     the correct date.
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
     session_writers: dict[str, data_logging.FileLogger] = {}
 
     data_logging.start_log(**arg, session_details=session_details)
@@ -246,7 +246,7 @@ def test_save_data():
     )
     data = pd.read_csv(
         os.path.join(
-            session_details["trial_folder"],
+            session_details.trial_folder,
             writers["player_trajectory"].filename,
         ),
         sep="\t",
@@ -281,7 +281,7 @@ def test_save_ts():
     Asserts that sample data from the instrumented wheels is properly saved,
     with the correct date.
     """
-    session_details: dict[str, data_logging.FileDetails] = {}
+    session_details = data_logging.FileDetails()
     session_writers: dict[str, data_logging.FileLogger] = {}
 
     data_logging.start_log(**arg, session_details=session_details)
@@ -316,7 +316,7 @@ def test_save_ts():
             )
 
             assert os.path.isfile(
-                os.path.join(session_details["trial_folder"], filename),
+                os.path.join(session_details.trial_folder, filename),
             ), f"TEST _save_ts: File {filename} is missing."
 
     data_logging.end_trial(
@@ -332,7 +332,7 @@ def test_save_ts():
             )
 
             data = pd.read_csv(
-                os.path.join(session_details["trial_folder"], filename),
+                os.path.join(session_details.trial_folder, filename),
                 sep="\t",
             )
 

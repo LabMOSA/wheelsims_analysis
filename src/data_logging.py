@@ -76,14 +76,6 @@ class FileLogger:
         if self.file:
             self.file.close()
 
-    def convert_csv(self) -> None:
-        """Convert the written file from .txt to .csv."""
-        txt_data = pd.read_csv(self.filename, sep="\t")
-        if not os.path.exists(self.filename.split(".txt")[0] + ".csv"):
-            txt_data.to_csv(
-                self.filename.split(".txt")[0] + ".csv", index=False
-            )
-
 
 session_writers: dict[str, FileLogger] = {}
 
@@ -835,11 +827,9 @@ def end_log(
     motion_capture: bool,
     position: str,
     rotation: str,
-    session_writers: dict[str, FileLogger] = session_writers,
-    session_details: FileDetails = session_details,
 ) -> None:
     """
-    Convert all recorded files from txt to csv.
+    Ensure end_trial is called on the final trial.
 
     Parameters
     ----------
@@ -861,9 +851,6 @@ def end_log(
         The current player position in the simulator.
     rotation:
         The current player rotation in the simulator.
-    session_details :
-        Dictionary holding folder details for current session/trial.
-        The default is session_details.
 
     """
     if len(session_writers) > 0:
@@ -878,11 +865,3 @@ def end_log(
             position=position,
             rotation=rotation,
         )
-
-    for i in range(1, session_details["trial"] + 1):
-        trial_folder = os.path.join(
-            session_details["session_folder"], "T" + str(i)
-        )
-        files = list(Path(trial_folder).glob("*.txt"))
-        for file in files:
-            FileLogger(str(file)).convert_csv()

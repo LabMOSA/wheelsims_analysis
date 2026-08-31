@@ -9,12 +9,10 @@ well as information collected through the instrumented wheels.
 import glob
 import os
 from datetime import date
-from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import kineticstoolkit as ktk
 import numpy as np
-import pandas as pd
 from nextwheel import NextWheel
 
 import optitrack as ot
@@ -827,6 +825,8 @@ def end_log(
     motion_capture: bool,
     position: str,
     rotation: str,
+    session_writers: dict[str, FileLogger] = session_writers,
+    session_details: FileDetails = session_details,
 ) -> None:
     """
     Ensure end_trial is called on the final trial.
@@ -864,4 +864,6 @@ def end_log(
             motion_capture=motion_capture,
             position=position,
             rotation=rotation,
+            session_writers=session_writers,
+            session_details=session_details,
         )

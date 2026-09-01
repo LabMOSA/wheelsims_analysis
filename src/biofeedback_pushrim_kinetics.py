@@ -1,5 +1,6 @@
 """Calculations for pushrim kinetics biofeedback."""
 
+from dataclasses import dataclass
 from typing import Any
 
 import kineticstoolkit as ktk
@@ -8,6 +9,7 @@ from kineticstoolkit_extensions import pushrimkinetics as pk
 from nextwheel import NextWheel
 
 from nextwheel_dummy import NextWheel as NextWheelDummy
+from python_bridge import sender
 
 TIME_SPAN = 5  # Number of seconds to show on the rolling plot
 N_POINTS = 300  # Number of points in the rolling plot
@@ -15,26 +17,58 @@ N_POINTS = 300  # Number of points in the rolling plot
 N_PUSHES = 3  # Number of pushes to calculate on
 
 
+@dataclass
+class PushrimKineticsBiofeedback:
+    """Contains the NextWheel instance and processing methods."""
 
-class GlobalVariables():
-    """Contain the module's global variables."""
     # The NextWheel instance
     nw: NextWheel | NextWheelDummy = NextWheelDummy()
 
+    # Functions
+    def connect(self, ip: str) -> None:
+        """
+        Connect to the NextWheel.
 
-global_variables = GlobalVariables()
+        Parameters
+        ----------
+        ip
+            IP address of the NextWheel, or "dummy" to simulate a wheel that
+            sends prerecorded data.
+        """
+        if ip == "dummy":
+            self.nw = NextWheelDummy()
+        else:
+            self.nw = NextWheel(ip)
+
+    def process(self) -> None:
+        """Process data and send back to Godot, called regularly."""
+        nextwheel_data = self.nw.fetch()
+        processed_data = calculate_pushrim_kinetics_biofeedback(nextwheel_data)
+        sender.send(
+            {
+                "command": "biofeedback_pushrim_kinetics_process",
+                "data": processed_data,
+            }
+        )
 
 
-def init(**kwargs) -> None:
-    """Create the NextWheel instance."""
-    pass
+# %% Public interface for main.py
+
+# Create the instance
+pkb = PushrimKineticsBiofeedback(nw=NextWheel())
+
+
+def connect(ip: str) -> None:
+    """Connect to the NextWheel."""
+    pkb.connect(ip)
 
 
 def process(**kwargs) -> None:
     """Run the process once."""
-    data = global_variables.nw.fetch()
-    out = calculate_pushrim_kinetics_biofeedback(data)
-    print(out)
+    pkb.process()
+
+
+# %% Processing functions
 
 
 def calculate_pushrim_kinetics_biofeedback(
@@ -107,7 +141,7 @@ def calculate_pushrim_kinetics_biofeedback(
     final_frequency = float(N_POINTS) / (ts.time[-1] - ts.time[0])
     ts = ktk.filters.butter(ts, final_frequency / 2)
     ts.resample(final_frequency, in_place=True)
-    out["Ftot"] = ts.data["Ftot"]
+    out["FtotCurve"] = ts.data["Ftot"].tolist()
 
     if show_plot:
         ts.plot(["Forces", "Ftot"])

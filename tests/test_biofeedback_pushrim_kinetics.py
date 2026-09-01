@@ -1,4 +1,4 @@
-"""Just a script for now, will become a proper unit test later."""
+"""Test for biofeedback_pushrim_kinetics module."""
 
 import matplotlib.pyplot as plt
 import pytest
@@ -14,9 +14,13 @@ sys.path.append(root_dir)
 import biofeedback_pushrim_kinetics
 
 
+def test_run_doesnt_crash():
+    """Check that running the function won't crash."""
+    biofeedback_pushrim_kinetics.connect("dummy")
 
-biofeedback_pushrim_kinetics.init()
-while True:
-    biofeedback_pushrim_kinetics.process()
-    plt.pause(0.1)
-    plt.cla()
+    for i in range(10):
+        biofeedback_pushrim_kinetics.process()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    pytest.main([__file__])

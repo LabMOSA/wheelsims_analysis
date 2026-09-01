@@ -17,6 +17,9 @@ in this case they are executed one after the other, continuously.
 
 For run_mode == "stop", the function listed in COMMAND_MAPPING[command] stops
 being executed consinuously.
+
+Command "close" is reserved for closing the python bridge.
+
 """
 
 import os
@@ -24,29 +27,16 @@ from collections.abc import Callable
 from typing import Any
 
 import biofeedback
+import biofeedback_pushrim_kinetics as bf_pk
 import data_logging
 from python_bridge import GODOT_TO_PYTHON_PORT, IP, Receiver, sender
 
-
-class PrivateVariables:
-    """Keep track of private variables."""
-
-    is_running: bool = True
-
-
-_private_vars = PrivateVariables
 _running_commands: dict[str, dict[str, Any]] = {}
-
-
-def _close(args=None):
-    """Close the Python app."""
-    print("\nClose Python app...")
-    _private_vars.is_running = False
 
 
 def _send_ready() -> None:
     """Send ready to Godot."""
-    sender.send({"command": "ready", "args": {}, "data": []})
+    sender.send({"command": "ready", "data": []})
 
 
 def _test(arg1: str, arg2: int) -> None:
@@ -63,7 +53,8 @@ COMMAND_MAPPING: dict[str, Callable] = {
     "test": _test,
     "biofeedback_update": biofeedback.biofeedback_update,
     "biofeedback_stop": biofeedback.biofeedback_stop,
-    "close": _close,
+    "biofeedback_pushrim_kinetics_connect": bf_pk.connect,
+    "biofeedback_pushrim_kinetics_process": bf_pk.process,
     "start_logging": data_logging.start_log,
     "create_trial": data_logging.create_trial,
     "data_logging": data_logging.save_data,
@@ -78,8 +69,9 @@ if __name__ == "__main__":
     # Send "ready" to Godot
     _send_ready()
 
+    stay_in_loop = True
     # Listening Godot requests
-    while _private_vars.is_running:
+    while True:
         # Execute every command in the UDP buffer
         while command_dict := receiver.receive():
             command = command_dict["command"]
@@ -87,6 +79,11 @@ if __name__ == "__main__":
             args = command_dict["args"]
 
             print(f"{run_mode} : {command} {args}")
+
+            if command == "close":
+                # Close now
+                stay_in_loop = False
+                break
 
             if run_mode == "start":
                 if command not in _running_commands:
@@ -103,7 +100,7 @@ if __name__ == "__main__":
                 raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
         # Do not execute repeating commands after shutdown request
-        if not _private_vars.is_running:
+        if not stay_in_loop:
             break
 
         # Execute every repeating command

@@ -18,11 +18,16 @@ __license__ = "Apache 2.0"
 import json
 import socket
 from typing import Any
+from itertools import cycle
+import time
+
 
 IP = "127.0.0.1"
 GODOT_TO_PYTHON_PORT = 4243
 PYTHON_TO_GODOT_PORT = 4242
 DATA_SIZE = 1024  # bytes
+MAX_SEND_RATE = 10  # Max number of data sent per second
+
 
 
 class Receiver:
@@ -89,6 +94,9 @@ class Sender:
         self.ip = ip
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._spinner = cycle("|/-\\")
+        self._last_time = time.time()
+
 
     def send(
         self,
@@ -106,8 +114,15 @@ class Sender:
 
         """
         json_message = json.dumps(data).encode("utf-8")
+        
+        while(_time := time.time() < self._last_time + 1/MAX_SEND_RATE):
+        	time.sleep(1/MAX_SEND_RATE)
+        self._last_time = _time
+                
         self.socket.sendto(json_message, (self.ip, self.port))
-        print(f"Sending {data}")
+    
+    	# Make the spinner advance    
+        print(next(self._spinner), end="\r", flush=True)
 
 
 # Create a sender instance to be imported by the different modules

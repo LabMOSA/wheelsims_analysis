@@ -141,6 +141,9 @@ def calculate_pushrim_kinetics_biofeedback(
     final_frequency = float(N_POINTS) / (ts.time[-1] - ts.time[0])
     ts = ktk.filters.butter(ts, final_frequency / 2)
     ts.resample(final_frequency, in_place=True)
+
+    ts.data["Ftot"][ts.isnan("Ftot")] = 0.0
+
     out["FtotCurve"] = ts.data["Ftot"].tolist()
 
     if show_plot:

@@ -31,11 +31,15 @@ import biofeedback_pushrim_kinetics as bf_pk
 import data_logging
 from python_bridge import GODOT_TO_PYTHON_PORT, IP, Receiver, sender
 
+
+
+
 _running_commands: dict[str, dict[str, Any]] = {}
 
 
 def _send_ready() -> None:
     """Send ready to Godot."""
+    print("Ready.")
     sender.send({"command": "ready", "data": []})
 
 
@@ -94,7 +98,13 @@ if __name__ == "__main__":
                     _running_commands.pop(command)
 
             elif run_mode == "once":
-                COMMAND_MAPPING[command](**command_dict["args"])
+                try:
+                    COMMAND_MAPPING[command](**command_dict["args"])
+                except Exception as e:
+                    print("======================")
+                    print(f"Exception in command {command} with args {args}.")
+                    print("Traceback:")
+                    print(e)
 
             else:
                 raise ValueError("frequency must be 'start', 'stop' or 'once'")
@@ -105,7 +115,13 @@ if __name__ == "__main__":
 
         # Execute every repeating command
         for command in _running_commands:
-            COMMAND_MAPPING[command](**_running_commands[command]["args"])
+            try:
+                COMMAND_MAPPING[command](**_running_commands[command]["args"])
+            except Exception as e:
+                print("======================")
+                print(f"Exception in command {command} with args {args}.")
+                print("Traceback:")
+                print(e)
 
     # Quit
     os._exit(0)

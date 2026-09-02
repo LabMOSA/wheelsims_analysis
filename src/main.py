@@ -25,32 +25,26 @@ Command "close" is reserved for closing the python bridge.
 import os
 from collections.abc import Callable
 from typing import Any
+import time
+import traceback
 
 import biofeedback
 import biofeedback_pushrim_kinetics as bf_pk
 import data_logging
 from python_bridge import GODOT_TO_PYTHON_PORT, IP, Receiver, sender
 
+ # How many seconds to sleep before polling UDP again once it's empty
+SLEEP_TIME_ON_EMPTY_UDP_BUFFER = 1/60  # s
 
 
 
-_running_commands: dict[str, dict[str, Any]] = {}
 
 
-def _send_ready() -> None:
-    """Send ready to Godot."""
-    print("Ready.")
-    sender.send({"command": "ready", "data": []})
 
-
-def _test(arg1: str, arg2: int) -> None:
+def _test(arg1: int, arg2: int) -> list:
     """Answer to test command (used in unit tests)."""
-    sender.send(
-        {
-            "command": "test",
-            "data": [arg1, arg2, 1, 2, 3],
-        }
-    )
+    time.sleep(1)
+    return [arg1, arg2, 1, 2, 3]
 
 
 COMMAND_MAPPING: dict[str, Callable] = {
@@ -71,57 +65,44 @@ if __name__ == "__main__":
     # Create the receiver
     receiver = Receiver(ip=IP, port=GODOT_TO_PYTHON_PORT, timeout=0.0)
     # Send "ready" to Godot
-    _send_ready()
+    sender.send({"id":"ready"})
 
     stay_in_loop = True
     # Listening Godot requests
     while True:
         # Execute every command in the UDP buffer
         while command_dict := receiver.receive():
+            print(command_dict)
             command = command_dict["command"]
-            run_mode = command_dict["run_mode"]
-            args = command_dict["args"]
+            kwargs = command_dict["kwargs"]
+            command_id = command_dict["id"]
 
-            print(f"{run_mode} : {command} {args}")
+            print(f"{command} {kwargs}")
 
             if command == "close":
                 # Close now
                 stay_in_loop = False
                 break
 
-            if run_mode == "start":
-                if command not in _running_commands:
-                    _running_commands[command] = {"args": args}
+            try:
+                return_value = COMMAND_MAPPING[command](**command_dict["kwargs"])
+            except Exception:
+                return_value = None
+                print("======================")
+                print(f"Exception in command {command} with kwargs {kwargs}.")
+                traceback.print_exc()
 
-            elif run_mode == "stop":
-                if command in _running_commands:
-                    _running_commands.pop(command)
+            # Send back the return value
+            sender.send({"id": command_id, "value": return_value})
 
-            elif run_mode == "once":
-                try:
-                    COMMAND_MAPPING[command](**command_dict["args"])
-                except Exception as e:
-                    print("======================")
-                    print(f"Exception in command {command} with args {args}.")
-                    print("Traceback:")
-                    print(e)
-
-            else:
-                raise ValueError("frequency must be 'start', 'stop' or 'once'")
 
         # Do not execute repeating commands after shutdown request
         if not stay_in_loop:
             break
 
-        # Execute every repeating command
-        for command in _running_commands:
-            try:
-                COMMAND_MAPPING[command](**_running_commands[command]["args"])
-            except Exception as e:
-                print("======================")
-                print(f"Exception in command {command} with args {args}.")
-                print("Traceback:")
-                print(e)
+        # Wait some time before checking if a new request was received
+        time.sleep(SLEEP_TIME_ON_EMPTY_UDP_BUFFER)
+
 
     # Quit
     os._exit(0)

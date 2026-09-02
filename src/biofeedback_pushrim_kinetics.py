@@ -40,16 +40,10 @@ class PushrimKineticsBiofeedback:
         else:
             self.nw = NextWheel(ip)
 
-    def process(self) -> None:
+    def process(self) -> dict:
         """Process data and send back to Godot, called regularly."""
         nextwheel_data = self.nw.fetch()
-        processed_data = calculate_pushrim_kinetics_biofeedback(nextwheel_data)
-        sender.send(
-            {
-                "command": "biofeedback_pushrim_kinetics_process",
-                "data": processed_data,
-            }
-        )
+        return calculate_pushrim_kinetics_biofeedback(nextwheel_data)
 
 
 # %% Public interface for main.py
@@ -63,9 +57,9 @@ def connect(ip: str) -> None:
     pkb.connect(ip)
 
 
-def process(**kwargs) -> None:
+def process(**kwargs) -> dict:
     """Run the process once."""
-    pkb.process()
+    return pkb.process()
 
 
 # %% Processing functions

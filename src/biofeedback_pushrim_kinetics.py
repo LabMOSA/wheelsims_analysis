@@ -9,7 +9,6 @@ from kineticstoolkit_extensions import pushrimkinetics as pk
 from nextwheel import NextWheel
 
 from nextwheel_dummy import NextWheel as NextWheelDummy
-from python_bridge import sender
 
 TIME_SPAN = 5  # Number of seconds to show on the rolling plot
 N_POINTS = 300  # Number of points in the rolling plot

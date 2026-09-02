@@ -23,22 +23,19 @@ Command "close" is reserved for closing the python bridge.
 """
 
 import os
-from collections.abc import Callable
-from typing import Any
 import time
 import traceback
+from collections.abc import Callable
+from itertools import cycle
 
 import biofeedback
 import biofeedback_pushrim_kinetics as bf_pk
 import data_logging
 from python_bridge import GODOT_TO_PYTHON_PORT, IP, Receiver, sender
 
- # How many seconds to sleep before polling UDP again once it's empty
-SLEEP_TIME_ON_EMPTY_UDP_BUFFER = 1/60  # s
-
-
-
-
+# How many seconds to sleep before polling UDP again once it's empty
+SLEEP_TIME_ON_EMPTY_UDP_BUFFER = 1 / 60  # s
+SPINNER = cycle("|/-\\")
 
 
 def _test(arg1: int, arg2: int) -> list:
@@ -65,19 +62,17 @@ if __name__ == "__main__":
     # Create the receiver
     receiver = Receiver(ip=IP, port=GODOT_TO_PYTHON_PORT, timeout=0.0)
     # Send "ready" to Godot
-    sender.send({"id":"ready"})
+    sender.send({"id": "ready", "value": None})
+    print("Ready.")
 
     stay_in_loop = True
     # Listening Godot requests
     while True:
         # Execute every command in the UDP buffer
         while command_dict := receiver.receive():
-            print(command_dict)
             command = command_dict["command"]
             kwargs = command_dict["kwargs"]
             command_id = command_dict["id"]
-
-            print(f"{command} {kwargs}")
 
             if command == "close":
                 # Close now
@@ -85,7 +80,9 @@ if __name__ == "__main__":
                 break
 
             try:
-                return_value = COMMAND_MAPPING[command](**command_dict["kwargs"])
+                return_value = COMMAND_MAPPING[command](
+                    **command_dict["kwargs"]
+                )
             except Exception:
                 return_value = None
                 print("======================")
@@ -94,7 +91,7 @@ if __name__ == "__main__":
 
             # Send back the return value
             sender.send({"id": command_id, "value": return_value})
-
+            print(next(SPINNER), end="\r", flush=True)
 
         # Do not execute repeating commands after shutdown request
         if not stay_in_loop:
@@ -102,7 +99,6 @@ if __name__ == "__main__":
 
         # Wait some time before checking if a new request was received
         time.sleep(SLEEP_TIME_ON_EMPTY_UDP_BUFFER)
-
 
     # Quit
     os._exit(0)

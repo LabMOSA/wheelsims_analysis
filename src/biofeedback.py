@@ -18,8 +18,8 @@ import kineticstoolkit as ktk
 import matplotlib.pyplot as plt
 import numpy as np
 
-import optitrack as ot
 import propulsion_patterns
+from optitrack import Optitrack
 
 # %% Public variables
 # Current analysis window (n s).
@@ -33,6 +33,9 @@ ID_LEFT_HAND_CLUSTER: Final = "201"
 
 # OptiTrack rigid body ID assigned to the right hand marker cluster
 ID_RIGHT_HAND_CLUSTER: Final = "202"
+
+# Create an instance of the Optitrack class
+ot = Optitrack()
 
 
 # %% Typing classes

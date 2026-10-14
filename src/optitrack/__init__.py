@@ -37,145 +37,165 @@ import numpy as np
 
 from .NatNetClient import NatNetClient
 
-# Maximal number of frames to keep in memory
-FRAME_LIMIT = 10000
 
-# Initialize empty lists to store positions, orientations and timestamps
-_data: dict[int, dict[str, list]] = {}
-ts: dict[str, ktk.TimeSeries] = {}
-
-# Global variable for the NatNet client
-_streaming_client = NatNetClient()
-
-
-def receive_rigid_body_frame(
-    new_id: int, position: np.ndarray, orientation: np.ndarray
-) -> None:
+class Optitrack:
     """
-    Add a new received rigid body data (used as callback).
+    A class that receives the position/orientation of rigid bodies from Motive.
 
     Parameters
     ----------
-    new_id
-        The ID of the rigid body.
-    position
-        The position of the rigid body as a NumPy array.
-    orientation
-        The orientation of the rigid body as a NumPy array.
+    frame_limit
+        The maximal number of frames to keep in memory
 
     """
-    # Get UNIX TimeStamps for the absolute_time
-    absolute_time = time.time()
 
-    if new_id not in _data:
-        _data[new_id] = {"_positions": [], "_orientations": [], "_times": []}
+    def __init__(self, frame_limit: int = 10000):
+        # Maximal number of frames to keep in memory
+        self._frame_limit = 10000
 
-    if len(_data[new_id]["_times"]) > 0:
-        last_time = _data[new_id]["_times"][-1]
-        if absolute_time <= last_time:
-            absolute_time = last_time + 1e-6
+        # Initialize empty containers to store positions, orientations and
+        # timestamps
+        self._data: dict[int, dict[str, list]] = {}
+        self._ts: dict[str, ktk.TimeSeries] = {}
 
-    # Add position, orientation and timestamp
-    _data[new_id]["_positions"].append(np.append(position, 1.0))
-    _data[new_id]["_orientations"].append(np.append(orientation, 1.0))
-    _data[new_id]["_times"].append(absolute_time)
+        # NatNet client
+        self._streaming_client = NatNetClient()
 
-    # If frame count exceeds limit, remove oldest frames
-    if len(_data[new_id]["_positions"]) > FRAME_LIMIT:
-        _data[new_id]["_positions"].pop(0)
-        _data[new_id]["_orientations"].pop(0)
-        _data[new_id]["_times"].pop(0)
+    def receive_rigid_body_frame(
+        self, new_id: int, position: np.ndarray, orientation: np.ndarray
+    ) -> None:
+        """
+        Add a new received rigid body data.
+
+        This function is used as callback.
+
+        Parameters
+        ----------
+        new_id
+            The ID of the rigid body.
+        position
+            The position of the rigid body as a NumPy array.
+        orientation
+            The orientation of the rigid body as a NumPy array.
+
+        """
+        # Get UNIX TimeStamps for the absolute_time
+        absolute_time = time.time()
+
+        if new_id not in self._data:
+            self._data[new_id] = {
+                "_positions": [],
+                "_orientations": [],
+                "_times": [],
+            }
+
+        if len(self._data[new_id]["_times"]) > 0:
+            last_time = self._data[new_id]["_times"][-1]
+            if absolute_time <= last_time:
+                absolute_time = last_time + 1e-6
+
+        # Add position, orientation and timestamp
+        self._data[new_id]["_positions"].append(np.append(position, 1.0))
+        self._data[new_id]["_orientations"].append(np.append(orientation, 1.0))
+        self._data[new_id]["_times"].append(absolute_time)
+
+        # If frame count exceeds limit, remove oldest frames
+        if len(self._data[new_id]["_positions"]) > self._frame_limit:
+            self._data[new_id]["_positions"].pop(0)
+            self._data[new_id]["_orientations"].pop(0)
+            self._data[new_id]["_times"].pop(0)
+
+    def fetch(
+        self, clear_buffer=False, transform_data=True
+    ) -> dict[str, ktk.TimeSeries]:
+        """
+        Get all received rigid bodies as TimeSeries of transforms.
+
+        Returns a dictionary of TimeSeries where each key is the ID of the
+        rigid body in Motive, and the TimeSeries contains one transform series.
+        The max length of these TimeSeries can be changed by changing the
+        frame_limit attribute of this class.
+
+        A dictionary of TimeSeries is returned instead of one TimeSeries
+        because each data is received at a different time value. TimeSeries can
+        then be merged to a single time vector using the TimeSeries.merge()
+        method.
+
+        Parameters
+        ----------
+        clear_buffer
+            Whether to clear the data buffer after acquisition.
+            The default is False.
+        transform_data
+            Whether to create the homogeneous transformation matrix (True) from
+            the orientations and positions, or to return this raw data (False).
+            The default is True.
 
 
-def fetch(
-    clear_buffer=False, transform_data=True
-) -> dict[str, ktk.TimeSeries]:
-    """
-    Get all received rigid bodies as TimeSeries of transforms.
+        Returns
+        -------
+        dict[str, ktk.TimeSeries]
 
-    Returns a dictionary of TimeSeries where each key is the ID of the rigid
-    body in Motive, and the TimeSeries contains one transform series. The max
-    length of these TimeSeries can be changed by changing the FRAME_LIMIT
-    property of this module.
-
-    A dictionary of TimeSeries is returned instead of one TimeSeries because
-    each data is received at a different time value. TimeSeries can then be
-    merged to a single time vector using the TimeSeries.merge() method.
-
-    Parameters
-    ----------
-    clear_buffer
-        Whether to clear the data buffer after acquisition.
-        The default is False.
-    transform_data
-        Whether to create the homogeneous transformation matrix (True) from the
-        orientations and positions, or to return this raw data (False).
-        The default is True.
-
-
-    Returns
-    -------
-    dict[str, ktk.TimeSeries]
-
-    """
-    for key, value in _data.items():
-        n_samples = min(
-            len(value["_times"]),
-            len(value["_positions"]),
-            len(value["_orientations"]),
-        )
-
-        # Convert lists of times, positions and orientations to numpy arrays
-        times_np = np.array(value["_times"][:n_samples])
-        positions_np = np.array(value["_positions"][:n_samples])[:, 0:3]
-        orientations_np = np.array(value["_orientations"][:n_samples])[:, 0:4]
-
-        if transform_data:
-            # Create the homogeneous transformation matrix
-            transforms = ktk.geometry.create_transform_series(
-                quaternions=orientations_np, positions=positions_np
+        """
+        for key, value in self._data.items():
+            n_samples = min(
+                len(value["_times"]),
+                len(value["_positions"]),
+                len(value["_orientations"]),
             )
-        else:
-            transforms = np.hstack((orientations_np, positions_np))
 
-        # Create the timeseries
-        ts[str(key)] = ktk.TimeSeries(
-            data={str(key): transforms},
-            time=times_np,
+            # Convert lists of times, positions and orientations to np arrays
+            times_np = np.array(value["_times"][:n_samples])
+            positions_np = np.array(value["_positions"][:n_samples])[:, 0:3]
+            orientations_np = np.array(value["_orientations"][:n_samples])[
+                :, 0:4
+            ]
+
+            if transform_data:
+                # Create the homogeneous transformation matrix
+                transforms = ktk.geometry.create_transform_series(
+                    quaternions=orientations_np, positions=positions_np
+                )
+            else:
+                transforms = np.hstack((orientations_np, positions_np))
+
+            # Create the timeseries
+            self._ts[str(key)] = ktk.TimeSeries(
+                data={str(key): transforms},
+                time=times_np,
+            )
+        if clear_buffer:
+            self.clear()
+        return self._ts
+
+    def start(self) -> None:
+        """Start receiving data from NatNet."""
+        # Configure client to receive rigid body data
+        self._streaming_client.rigid_body_listener = (
+            self.receive_rigid_body_frame
         )
-    if clear_buffer:
-        clear()
-    return ts
 
+        # Start NatNet client
+        is_running = self._streaming_client.run()
+        if not is_running:
+            print(
+                "ERROR: Could not start streaming client."
+            )  # Indicates an error if the streaming client fails to start
+            sys.exit(1)
 
-def start() -> None:
-    """Start receiving data from NatNet."""
-    # Configure client to receive rigid body data
-    _streaming_client.rigid_body_listener = receive_rigid_body_frame
+        # Wait for client to connect
+        while not self._streaming_client.connected():
+            time.sleep(1)
 
-    # Start NatNet client
-    is_running = _streaming_client.run()
-    if not is_running:
         print(
-            "ERROR: Could not start streaming client."
-        )  # Indicates an error if the streaming client fails to start
-        sys.exit(1)
+            "Connected to the server. Receiving data..."
+        )  # Indicates successful connection to the NatNet server
 
-    # Wait for client to connect
-    while not _streaming_client.connected():
-        time.sleep(1)
+    def stop(self) -> None:
+        """Stop receiving data from NatNet."""
+        # Stop NatNet client
+        self._streaming_client.shutdown()
 
-    print(
-        "Connected to the server. Receiving data..."
-    )  # Indicates successful connection to the NatNet server
-
-
-def stop() -> None:
-    """Stop receiving data from NatNet."""
-    # Stop NatNet client
-    _streaming_client.shutdown()
-
-
-def clear() -> None:
-    """Clear buffer."""
-    _data.clear()
+    def clear(self) -> None:
+        """Clear buffer."""
+        self._data.clear()

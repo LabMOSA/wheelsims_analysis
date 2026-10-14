@@ -14,7 +14,7 @@ import kineticstoolkit as ktk
 import numpy as np
 from nextwheel import NextWheel
 
-import optitrack as ot
+from optitrack import Optitrack
 
 # %% Session dictionaries
 
@@ -29,6 +29,8 @@ wheels = {
     },
 }
 
+# %% Create an instance of Optitrack
+ot = Optitrack()
 
 # %% Classes to hold data and arguments
 

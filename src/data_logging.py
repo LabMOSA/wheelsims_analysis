@@ -63,7 +63,7 @@ class FileLogger:
                 self.file.write(",".join(map(str, row)) + "\n")
 
         else:
-            raise ValueError(f"File {self.file.name('\\')[-1]} is closed.")
+            raise ValueError("File " + self.file.name('\\')[-1] + " is closed.")
 
     def close_log(self) -> None:
         """Close an opened file."""
